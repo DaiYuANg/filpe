@@ -11,6 +11,21 @@ uv run filpe
 PYTHONPATH=src uv run uvicorn filpe.api.app:app --reload
 ```
 
+## Docker
+
+```bash
+# Build (multi-stage, minimal image)
+docker build -t filpe:latest .
+
+# Run
+docker run -p 8000:8000 filpe:latest
+
+# Or with docker-compose
+docker compose up -d
+```
+
+Env: `FILPE_API_HOST`, `FILPE_API_PORT`, `FILPE_BACKEND`, `FILPE_MAX_FILE_SIZE_MB`
+
 ## Excel Processing
 
 ### Upload endpoint

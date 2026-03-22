@@ -1,0 +1,12 @@
+services:
+  filpe:
+    build: .
+    image: filpe:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - FILPE_API_HOST=0.0.0.0
+      - FILPE_API_PORT=8000
+      - FILPE_BACKEND=memory
+    # Optional: increase file size limit (MB)
+    # - FILPE_MAX_FILE_SIZE_MB=100

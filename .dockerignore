@@ -1,0 +1,29 @@
+# Git
+.git
+.gitignore
+
+# Python
+.venv
+__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Build
+dist
+build
+*.egg
+
+# IDE
+.idea
+.vscode
+
+# Local / test
+.env
+*.xlsx
+sample.xlsx
+scripts
+
+# README.md needed by pyproject build
