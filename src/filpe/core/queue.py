@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from filpe.models.job import JobRequest, JobStatus, JobState
+from filpe.models.job import JobRequest, JobState, JobStatus
 
 
 class QueueBackend(ABC):

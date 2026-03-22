@@ -37,12 +37,14 @@ class ProcessorRegistry:
         result = []
         for name in self._processors:
             meta = PROCESSOR_METADATA.get(name, {})
-            result.append({
-                "name": name,
-                "category": meta.get("category", "general"),
-                "description": meta.get("description", ""),
-                "options": meta.get("options", []),
-            })
+            result.append(
+                {
+                    "name": name,
+                    "category": meta.get("category", "general"),
+                    "description": meta.get("description", ""),
+                    "options": meta.get("options", []),
+                }
+            )
         return result
 
 

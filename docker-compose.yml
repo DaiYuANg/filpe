@@ -1,4 +1,9 @@
 services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    ports:
+      - "6379:6379"
+
   filpe:
     build: .
     image: filpe:latest
@@ -7,6 +12,17 @@ services:
     environment:
       - FILPE_API_HOST=0.0.0.0
       - FILPE_API_PORT=8000
-      - FILPE_BACKEND=memory
-    # Optional: increase file size limit (MB)
-    # - FILPE_MAX_FILE_SIZE_MB=100
+      - FILPE_BACKEND=rq
+      - FILPE_VALKEY_URL=redis://valkey:6379/0
+    depends_on:
+      - valkey
+
+  filpe-worker:
+    build: .
+    image: filpe:latest
+    command: ["filpe-worker"]
+    environment:
+      - FILPE_BACKEND=rq
+      - FILPE_VALKEY_URL=redis://valkey:6379/0
+    depends_on:
+      - valkey

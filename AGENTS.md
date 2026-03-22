@@ -156,7 +156,7 @@ Rules:
 ## Python and Style Rules
 
 ### Python version
-Use Python 3.12.
+Use Python 3.14 (see .python-version).
 
 ### Typing
 Type hints are mandatory for public functions and non-trivial internal functions.

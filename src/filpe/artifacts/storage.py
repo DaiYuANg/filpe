@@ -4,7 +4,7 @@ import base64
 import uuid
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class ArtifactMetadata(BaseModel):

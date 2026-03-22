@@ -1,6 +1,6 @@
 """Artifact output handling."""
 
-from filpe.artifacts.storage import ArtifactMetadata, write_artifact
+from filpe.artifacts.storage import write_artifact
 
 
 def collect_artifacts_from_result(

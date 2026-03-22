@@ -1,5 +1,5 @@
 # Multi-stage build for minimal image
-FROM python:3.13-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ ENV UV_COMPILE_BYTECODE=0
 RUN uv sync --no-dev --frozen
 
 # Runtime stage
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 

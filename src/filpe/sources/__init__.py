@@ -1,8 +1,8 @@
 """Source adapters for input file resolution."""
 
 from filpe.models.job import SourceSpec, SourceType, StagedInput
-from filpe.sources.upload import stage_upload
 from filpe.sources.inline import stage_inline
+from filpe.sources.upload import stage_upload
 
 
 def stage_source(

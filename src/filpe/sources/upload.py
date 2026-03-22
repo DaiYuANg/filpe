@@ -1,6 +1,5 @@
 """Upload source adapter."""
 
-import base64
 import uuid
 from pathlib import Path
 

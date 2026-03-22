@@ -5,7 +5,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 import structlog
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import ORJSONResponse
 from injector import Injector
 
@@ -78,7 +78,7 @@ async def create_job_upload(
     ),
     options: str = Form(
         default="{}",
-        description="Processor options as JSON. e.g. {\"max_width\": 800} for image.resize",
+        description='Processor options as JSON. e.g. {"max_width": 800} for image.resize',
     ),
 ) -> dict:
     """Create a job with uploaded file. Use GET /processors for available processors and options."""

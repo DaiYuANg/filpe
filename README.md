@@ -17,14 +17,30 @@ PYTHONPATH=src uv run uvicorn filpe.api.app:app --reload
 # Build (multi-stage, minimal image)
 docker build -t filpe:latest .
 
-# Run
+# Run (memory backend, single container)
 docker run -p 8000:8000 filpe:latest
 
-# Or with docker-compose
+# Or with docker-compose (Valkey + RQ backend, API + worker)
 docker compose up -d
 ```
 
-Env: `FILPE_API_HOST`, `FILPE_API_PORT`, `FILPE_BACKEND`, `FILPE_MAX_FILE_SIZE_MB`
+docker-compose: Valkey (Redis-compatible), filpe API, filpe-worker.
+
+Env: `FILPE_API_HOST`, `FILPE_API_PORT`, `FILPE_BACKEND`, `FILPE_VALKEY_URL`, `FILPE_MAX_FILE_SIZE_MB`
+
+## Development
+
+```bash
+uv run poe lint        # Ruff check
+uv run poe format      # Ruff format
+uv run poe format-check  # Check format (CI)
+uv run poe typecheck   # Mypy
+uv run poe test        # Pytest
+uv run poe build       # uv build
+uv run poe docker      # docker build -t filpe:latest .
+uv run poe docker-compose  # docker compose build
+uv run poe default     # lint + format-check
+```
 
 ## Excel Processing
 
