@@ -4,7 +4,6 @@ from injector import Binder, Module, provider, singleton
 
 from filpe.core.config import Config
 from filpe.core.queue import MemoryQueueBackend, QueueBackend
-from filpe.core.queue_rq import RQQueueBackend
 from filpe.core.registry import ProcessorRegistry, get_default_registry
 
 
@@ -18,6 +17,8 @@ class FilpeModule(Module):
 
     @provider
     def _provide_queue_backend(self, config: Config) -> QueueBackend:
-        if config.backend == "rq":
-            return RQQueueBackend()
+        if config.backend == "valkey":
+            from filpe.core.queue_celery import CeleryQueueBackend
+
+            return CeleryQueueBackend()
         return MemoryQueueBackend()

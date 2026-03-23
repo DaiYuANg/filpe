@@ -17,13 +17,13 @@ class Config(BaseSettings):
         extra="ignore",
     )
 
-    backend: Literal["memory", "rq"] = Field(
+    backend: Literal["memory", "valkey"] = Field(
         default="memory",
-        description="Job queue backend: memory for local dev, rq for distributed.",
+        description="Job queue backend: memory for local dev (no Redis), valkey (Celery) for distributed.",
     )
     valkey_url: str = Field(
         default="redis://localhost:6379/0",
-        description="Valkey/Redis URL for RQ backend.",
+        description="Valkey/Redis URL for Celery broker.",
     )
     temp_dir: Path = Field(
         default_factory=lambda: Path("/tmp/filpe"),

@@ -91,9 +91,9 @@ The system must support multiple backend modes.
 
 At minimum:
 - memory backend for local/single-process development
-- rq/valkey backend for distributed execution
+- valkey (Celery) backend for distributed execution
 
-Do not tightly couple application logic to RQ or Valkey APIs.
+Do not tightly couple application logic to Celery or Valkey APIs.
 Always go through an internal abstraction layer.
 
 ### 7. Simplicity over premature abstraction
@@ -305,7 +305,7 @@ Suggested patterns:
 - Keep handlers thin
 - Validate everything at boundaries
 - Return stable response models
-- Do not leak backend-specific details such as raw RQ job internals
+- Do not leak backend-specific details such as raw Celery job internals
 
 ### Sync vs async
 Support both only where justified.
