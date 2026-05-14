@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	raftx "github.com/lyonbrown4d/maxio/internal/raft"
+	maxios3 "github.com/lyonbrown4d/maxio/internal/s3"
 	"github.com/lyonbrown4d/maxio/object"
 )
 
@@ -22,6 +23,7 @@ type Service struct {
 	logger  *slog.Logger
 	objects *object.Service
 	raft    *raftx.Runtime
+	s3      *maxios3.Service
 }
 
 func NewService(
@@ -33,6 +35,7 @@ func NewService(
 		logger:  logger,
 		objects: objects,
 		raft:    raftRuntime,
+		s3:      maxios3.NewService(objects, logger),
 	}
 }
 
@@ -44,23 +47,7 @@ func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	route := strings.Trim(path.Clean(r.URL.Path), "/")
 	parts := strings.Split(route, "/")
 
-	if route == "healthz" || route == "health" {
-		s.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-		return
-	}
-
-	if route == strings.Trim(defaultSearchPath, "/") {
-		s.handleSearch(w, r)
-		return
-	}
-
-	if route == strings.Trim(defaultClusterMembersPath, "/") {
-		s.handleClusterMembers(w, r)
-		return
-	}
-
-	if len(parts) == 3 && parts[0] == "_cluster" && parts[1] == "members" {
-		s.handleClusterMember(w, r, parts[2])
+	if s.handleControlRoute(w, r, route, parts) {
 		return
 	}
 
@@ -77,6 +64,34 @@ func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	bucket := parts[0]
 	key := strings.Join(parts[1:], "/")
 	s.handleObject(w, r, bucket, key)
+}
+
+func (s *Service) handleControlRoute(w http.ResponseWriter, r *http.Request, route string, parts []string) bool {
+	if route == "healthz" || route == "health" {
+		s.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		return true
+	}
+
+	if s.s3 != nil && s.s3.Match(r) {
+		s.s3.ServeHTTP(w, r)
+		return true
+	}
+
+	if route == strings.Trim(defaultSearchPath, "/") {
+		s.handleSearch(w, r)
+		return true
+	}
+
+	if route == strings.Trim(defaultClusterMembersPath, "/") {
+		s.handleClusterMembers(w, r)
+		return true
+	}
+
+	if len(parts) == 3 && parts[0] == "_cluster" && parts[1] == "members" {
+		s.handleClusterMember(w, r, parts[2])
+		return true
+	}
+	return false
 }
 
 func (s *Service) handleBuckets(w http.ResponseWriter, r *http.Request) {
