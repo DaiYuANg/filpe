@@ -86,6 +86,8 @@ func (s *Service) handleControlRoute(w http.ResponseWriter, r *http.Request, rou
 	case route == strings.Trim(defaultSearchPath, "/"):
 		s.handleSearch(w, r)
 		return true
+	case s.handleStorageShardRoute(w, r, parts):
+		return true
 	case route == strings.Trim(defaultClusterMembersPath, "/"):
 		s.handleClusterMembers(w, r)
 		return true

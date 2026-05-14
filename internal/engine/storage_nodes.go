@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -62,6 +63,58 @@ func (e *Engine) localNodeAddress(localNodeID string) string {
 	return address
 }
 
+func (e *Engine) StorageNode(id string) (StorageNode, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	nodeID := strings.TrimSpace(id)
+	if nodeID == "" {
+		nodeID = e.localNodeID
+	}
+	if nodeID == "" {
+		nodeID = DefaultLocalNodeID
+	}
+	node := e.nodes[nodeID]
+	if node == nil {
+		return nil, fmt.Errorf("storage node %q is not registered", nodeID)
+	}
+	return node, nil
+}
+
+func (e *Engine) LocalStorageNode() (StorageNode, error) {
+	return e.StorageNode(e.localNodeID)
+}
+
+func (e *Engine) WriteLocalShard(ctx context.Context, shardDir, hash string, index int, data []byte) error {
+	node, err := e.LocalStorageNode()
+	if err != nil {
+		return err
+	}
+	if err := node.WriteShard(ctx, shardDir, hash, index, data); err != nil {
+		return fmt.Errorf("write local shard on node %q: %w", node.ID(), err)
+	}
+	return nil
+}
+
+func (e *Engine) ReadLocalShard(ctx context.Context, shardDir, hash string, index int) ([]byte, error) {
+	node, err := e.LocalStorageNode()
+	if err != nil {
+		return nil, err
+	}
+	data, err := node.ReadShard(ctx, shardDir, hash, index)
+	if err != nil {
+		return nil, fmt.Errorf("read local shard from node %q: %w", node.ID(), err)
+	}
+	return data, nil
+}
+
+func (e *Engine) LocalShardExists(ctx context.Context, shardDir, hash string, index int) bool {
+	node, err := e.LocalStorageNode()
+	if err != nil {
+		return false
+	}
+	return node.ShardExists(ctx, shardDir, hash, index)
+}
+
 func syncRaftStorageNodes(localReplicaID uint64, raftNodes map[uint64]string) (map[string]StorageNode, string, error) {
 	nodes := make(map[string]StorageNode, len(raftNodes))
 	localNodeAddress := ""
@@ -74,10 +127,11 @@ func syncRaftStorageNodes(localReplicaID uint64, raftNodes map[uint64]string) (m
 			return nil, "", fmt.Errorf("raft target is required for replica %d", replicaID)
 		}
 
-		nodes[raftStorageNodeID(replicaID)] = &unsupportedRemoteStorageNode{
-			id:      raftStorageNodeID(replicaID),
-			address: target,
+		remote, err := newRemoteStorageNode(raftStorageNodeID(replicaID), target, nil)
+		if err != nil {
+			return nil, "", fmt.Errorf("build remote storage node for replica %d: %w", replicaID, err)
 		}
+		nodes[raftStorageNodeID(replicaID)] = remote
 		if replicaID == localReplicaID {
 			localNodeAddress = strings.TrimSpace(target)
 			delete(nodes, raftStorageNodeID(replicaID))
