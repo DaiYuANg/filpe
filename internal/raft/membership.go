@@ -109,21 +109,21 @@ func (rt *Runtime) SyncReplicas(ctx context.Context, desired map[uint64]string) 
 	if err != nil {
 		return SyncMembershipResult{}, err
 	}
-	if err := validateDesiredReplicaTargets(before, normalized); err != nil {
-		return SyncMembershipResult{Before: before}, err
+	if validationErr := validateDesiredReplicaTargets(before, normalized); validationErr != nil {
+		return SyncMembershipResult{Before: before}, validationErr
 	}
 
 	result := SyncMembershipResult{Before: before}
-	if err := rt.addMissingReplicas(ctx, before.Nodes, normalized, &result); err != nil {
-		return result, err
+	if addErr := rt.addMissingReplicas(ctx, before.Nodes, normalized, &result); addErr != nil {
+		return result, addErr
 	}
 
 	mid, err := rt.GetMembership(ctx)
 	if err != nil {
 		return result, err
 	}
-	if err := rt.removeExtraReplicas(ctx, mid.Nodes, normalized, &result); err != nil {
-		return result, err
+	if removeErr := rt.removeExtraReplicas(ctx, mid.Nodes, normalized, &result); removeErr != nil {
+		return result, removeErr
 	}
 
 	after, err := rt.GetMembership(ctx)
@@ -136,8 +136,7 @@ func (rt *Runtime) SyncReplicas(ctx context.Context, desired map[uint64]string) 
 
 func (rt *Runtime) addMissingReplicas(
 	ctx context.Context,
-	current map[uint64]string,
-	desired map[uint64]string,
+	current, desired map[uint64]string,
 	result *SyncMembershipResult,
 ) error {
 	for _, replica := range missingReplicas(current, desired) {
@@ -151,8 +150,7 @@ func (rt *Runtime) addMissingReplicas(
 
 func (rt *Runtime) removeExtraReplicas(
 	ctx context.Context,
-	current map[uint64]string,
-	desired map[uint64]string,
+	current, desired map[uint64]string,
 	result *SyncMembershipResult,
 ) error {
 	for _, replicaID := range extraReplicas(current, desired) {
@@ -199,7 +197,7 @@ func validateDesiredReplicaTargets(current Membership, desired map[uint64]string
 	return nil
 }
 
-func missingReplicas(current map[uint64]string, desired map[uint64]string) []Replica {
+func missingReplicas(current, desired map[uint64]string) []Replica {
 	replicas := make([]Replica, 0)
 	for replicaID, target := range desired {
 		if _, ok := current[replicaID]; !ok {
@@ -212,7 +210,7 @@ func missingReplicas(current map[uint64]string, desired map[uint64]string) []Rep
 	return replicas
 }
 
-func extraReplicas(current map[uint64]string, desired map[uint64]string) []uint64 {
+func extraReplicas(current, desired map[uint64]string) []uint64 {
 	replicaIDs := make([]uint64, 0)
 	for replicaID := range current {
 		if _, ok := desired[replicaID]; !ok {

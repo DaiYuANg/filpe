@@ -18,6 +18,7 @@ import (
 	"github.com/lyonbrown4d/maxio/internal/index"
 	"github.com/lyonbrown4d/maxio/internal/metadata"
 	"github.com/lyonbrown4d/maxio/internal/raft"
+	"github.com/lyonbrown4d/maxio/internal/s3"
 	"github.com/lyonbrown4d/maxio/internal/store"
 	"github.com/lyonbrown4d/maxio/object"
 )
@@ -247,6 +248,7 @@ func defaultModules(configOptions ...configx.Option) []dix.Module {
 		store.Module(),
 		index.Module(),
 		object.Module(),
+		s3.Module(),
 		handler.Module(),
 		http.Module(),
 	}

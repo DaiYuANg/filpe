@@ -7,8 +7,8 @@ require (
 	github.com/arcgolabs/configx v0.3.2
 	github.com/arcgolabs/dix v0.10.0
 	github.com/arcgolabs/eventx v0.1.2
-	github.com/arcgolabs/httpx v0.1.5
-	github.com/arcgolabs/httpx/adapter/fiber v0.1.5
+	github.com/arcgolabs/httpx v0.1.6
+	github.com/arcgolabs/httpx/adapter/fiber v0.1.6
 	github.com/arcgolabs/logx v0.1.2
 	github.com/arcgolabs/mapper v0.1.2
 	github.com/blevesearch/bleve/v2 v2.6.0

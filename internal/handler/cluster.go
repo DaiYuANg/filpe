@@ -18,42 +18,54 @@ type syncReplicasRequest struct {
 func (s *Service) handleClusterMembers(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		membership, err := s.raft.GetMembership(r.Context())
-		if err != nil {
-			s.writeError(w, err)
-			return
-		}
-		s.writeJSON(w, http.StatusOK, membership)
+		s.handleListClusterMembers(w, r)
 	case http.MethodPost:
-		var req addReplicaRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, err)
-			return
-		}
-		if err := s.raft.AddReplica(r.Context(), req.ReplicaID, req.Target); err != nil {
-			s.writeError(w, err)
-			return
-		}
-		s.writeJSON(w, http.StatusAccepted, map[string]any{
-			"replica_id": req.ReplicaID,
-			"target":     req.Target,
-			"status":     "added",
-		})
+		s.handleAddClusterMember(w, r)
 	case http.MethodPut:
-		var req syncReplicasRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, err)
-			return
-		}
-		result, err := s.raft.SyncReplicas(r.Context(), req.Nodes)
-		if err != nil {
-			s.writeError(w, err)
-			return
-		}
-		s.writeJSON(w, http.StatusOK, result)
+		s.handleSyncClusterMembers(w, r)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Service) handleListClusterMembers(w http.ResponseWriter, r *http.Request) {
+	membership, err := s.raft.GetMembership(r.Context())
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, membership)
+}
+
+func (s *Service) handleAddClusterMember(w http.ResponseWriter, r *http.Request) {
+	var req addReplicaRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if err := s.raft.AddReplica(r.Context(), req.ReplicaID, req.Target); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, http.StatusAccepted, map[string]any{
+		"replica_id": req.ReplicaID,
+		"target":     req.Target,
+		"status":     "added",
+	})
+}
+
+func (s *Service) handleSyncClusterMembers(w http.ResponseWriter, r *http.Request) {
+	var req syncReplicasRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	result, err := s.raft.SyncReplicas(r.Context(), req.Nodes)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Service) handleClusterMember(w http.ResponseWriter, r *http.Request, replicaID string) {

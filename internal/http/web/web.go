@@ -1,3 +1,4 @@
+// Package web embeds HTTP templates and static web assets.
 package web
 
 import (

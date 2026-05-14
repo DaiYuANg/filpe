@@ -150,7 +150,11 @@ func (rt *Runtime) joinSeeds() (int, error) {
 	if len(rt.seeds) == 0 || rt.list == nil {
 		return 0, nil
 	}
-	return rt.list.Join(rt.seeds)
+	joined, err := rt.list.Join(rt.seeds)
+	if err != nil {
+		return 0, fmt.Errorf("join discovery seeds: %w", err)
+	}
+	return joined, nil
 }
 
 func nodeFromMember(member *memberlist.Node) Node {
@@ -194,11 +198,11 @@ func nodeStateName(state memberlist.NodeStateType) string {
 func splitHostPort(value string) (string, int, error) {
 	host, portText, err := net.SplitHostPort(strings.TrimSpace(value))
 	if err != nil {
-		return "", 0, err
+		return "", 0, fmt.Errorf("split host port: %w", err)
 	}
 	port, err := strconv.Atoi(portText)
 	if err != nil {
-		return "", 0, err
+		return "", 0, fmt.Errorf("parse port: %w", err)
 	}
 	if port <= 0 || port > 65535 {
 		return "", 0, errors.New("port must be between 1 and 65535")

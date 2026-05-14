@@ -1,3 +1,4 @@
+// Package discovery provides gossip-based node discovery for MaxIO.
 package discovery
 
 import "encoding/json"

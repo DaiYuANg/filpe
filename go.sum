@@ -45,8 +45,12 @@ github.com/arcgolabs/eventx v0.1.2 h1:ikt4Cw+GW9Q1NsJVmmen74rQkNZBCdpqlwIfryYrGu
 github.com/arcgolabs/eventx v0.1.2/go.mod h1:8pvEz7hCLMyC8Y1VdX8+s7RjnY0haFLau4aiRmrkJkw=
 github.com/arcgolabs/httpx v0.1.5 h1:q8xb7ULdB08A1gK/KymHDFzd+s7I+OvuWqAVj86fzjE=
 github.com/arcgolabs/httpx v0.1.5/go.mod h1:le+QyVXbioOli0YQXe3k48E2bUs0VczKuDbQWz+FjLA=
+github.com/arcgolabs/httpx v0.1.6 h1:tRL3HrGJYJf27TISaKbDq97e+FiN/baA1c3RbXL8Ix4=
+github.com/arcgolabs/httpx v0.1.6/go.mod h1:le+QyVXbioOli0YQXe3k48E2bUs0VczKuDbQWz+FjLA=
 github.com/arcgolabs/httpx/adapter/fiber v0.1.5 h1:qe9H6jMvPJhxL7I8LNYLAuKfDIg2GeydjgzybratYhk=
 github.com/arcgolabs/httpx/adapter/fiber v0.1.5/go.mod h1:tWQyTJRM1C6c5yjWWnycf7kdzLYA/ZxY6Izex5jiYr4=
+github.com/arcgolabs/httpx/adapter/fiber v0.1.6 h1:2LtDD+nEphTttDbzeOfzzIP12Ka0xcEpInxVtNI04rs=
+github.com/arcgolabs/httpx/adapter/fiber v0.1.6/go.mod h1:tWQyTJRM1C6c5yjWWnycf7kdzLYA/ZxY6Izex5jiYr4=
 github.com/arcgolabs/httpx/adapter/std v0.1.5 h1:UzXc4INLpvl17aNMQhBOOjd7myo2iEkyKhSPrp92Wuc=
 github.com/arcgolabs/httpx/adapter/std v0.1.5/go.mod h1:aluFzezJTu14J3sUxWChTUsckny/l4cKXYBxEtf+rWc=
 github.com/arcgolabs/logx v0.1.2 h1:+VJF7T/mfI482CpbIQ4tSBXbxTVcOkmBaTOj+DaCom0=

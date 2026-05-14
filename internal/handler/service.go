@@ -33,6 +33,7 @@ func NewService(
 	objects *object.Service,
 	raftRuntime *raftx.Runtime,
 	discoveryRuntime *discovery.Runtime,
+	s3Service *maxios3.Service,
 	logger *slog.Logger,
 ) *Service {
 	return &Service{
@@ -40,7 +41,7 @@ func NewService(
 		objects:   objects,
 		raft:      raftRuntime,
 		discovery: discoveryRuntime,
-		s3:        maxios3.NewService(objects, logger),
+		s3:        s3Service,
 	}
 }
 
@@ -72,36 +73,43 @@ func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleControlRoute(w http.ResponseWriter, r *http.Request, route string, parts []string) bool {
-	if route == "healthz" || route == "health" {
+	switch {
+	case isHealthRoute(route):
 		s.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		return true
-	}
-
-	if s.s3 != nil && s.s3.Match(r) {
-		s.s3.ServeHTTP(w, r)
+	case s.handleS3Route(w, r):
 		return true
-	}
-
-	if route == strings.Trim(defaultSearchPath, "/") {
+	case route == strings.Trim(defaultSearchPath, "/"):
 		s.handleSearch(w, r)
 		return true
-	}
-
-	if route == strings.Trim(defaultClusterMembersPath, "/") {
+	case route == strings.Trim(defaultClusterMembersPath, "/"):
 		s.handleClusterMembers(w, r)
 		return true
-	}
-
-	if route == strings.Trim(defaultDiscoveryPath, "/") {
+	case route == strings.Trim(defaultDiscoveryPath, "/"):
 		s.handleDiscovery(w, r)
 		return true
-	}
-
-	if len(parts) == 3 && parts[0] == "_cluster" && parts[1] == "members" {
+	case isClusterMemberRoute(parts):
 		s.handleClusterMember(w, r, parts[2])
 		return true
+	default:
+		return false
 	}
-	return false
+}
+
+func isHealthRoute(route string) bool {
+	return route == "healthz" || route == "health"
+}
+
+func (s *Service) handleS3Route(w http.ResponseWriter, r *http.Request) bool {
+	if s.s3 == nil || !s.s3.Match(r) {
+		return false
+	}
+	s.s3.ServeHTTP(w, r)
+	return true
+}
+
+func isClusterMemberRoute(parts []string) bool {
+	return len(parts) == 3 && parts[0] == "_cluster" && parts[1] == "members"
 }
 
 func (s *Service) handleBuckets(w http.ResponseWriter, r *http.Request) {
