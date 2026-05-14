@@ -71,6 +71,20 @@ func (s *Store) CreateBucket(ctx context.Context, name string) error {
 }
 
 func (s *Store) DeleteBucket(ctx context.Context, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ErrBadRequest
+	}
+	objects, err := s.meta.ListObjectMetas(ctx, name, "")
+	if err != nil {
+		return mapStoreError(err)
+	}
+	for index := range objects {
+		meta := objects[index]
+		if _, err := s.DeleteObject(ctx, meta.Bucket, meta.Key); err != nil && !errors.Is(err, ErrNotFound) {
+			return fmt.Errorf("delete bucket object %q: %w", meta.Key, err)
+		}
+	}
 	return mapStoreError(s.meta.DeleteBucket(ctx, name))
 }
 

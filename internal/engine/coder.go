@@ -13,7 +13,7 @@ import (
 type Coder struct {
 	k      int
 	m      int
-	pool   *shardBackend
+	pool   ShardStore
 	scheme reedsolomon.Encoder
 }
 
@@ -21,7 +21,7 @@ type Coder struct {
 type CoderConfig struct {
 	DataChunks   int
 	ParityChunks int
-	ShardPool    *shardBackend
+	ShardPool    ShardStore
 }
 
 func (cfg CoderConfig) validate() error {
@@ -53,10 +53,10 @@ func newCoder(cfg CoderConfig) (*Coder, error) {
 	}, nil
 }
 
-func (c *Coder) DataChunks() int     { return c.k }
-func (c *Coder) ParityChunks() int   { return c.m }
-func (c *Coder) TotalChunks() int    { return c.k + c.m }
-func (c *Coder) Pool() *shardBackend { return c.pool }
+func (c *Coder) DataChunks() int   { return c.k }
+func (c *Coder) ParityChunks() int { return c.m }
+func (c *Coder) TotalChunks() int  { return c.k + c.m }
+func (c *Coder) Pool() ShardStore  { return c.pool }
 
 // Encode encodes a single object, splitting it into k data shards and m parity shards.
 func (c *Coder) Encode(data []byte) ([][]byte, error) {
@@ -99,13 +99,11 @@ func (c *Coder) Decode(shards [][]byte, originalSize int64) ([]byte, error) {
 	if shardSize == 0 {
 		return nil, errors.New("erasure: no shards available")
 	}
-	for i := range shards {
-		if shards[i] == nil {
-			shards[i] = make([]byte, shardSize)
-		}
-	}
 	if err := c.scheme.Reconstruct(shards); err != nil {
 		return nil, fmt.Errorf("erasure: decode data: %w", err)
+	}
+	if err := c.ensureDataShardsReady(shards); err != nil {
+		return nil, err
 	}
 	// Reassemble k data shards and truncate to the exact object size.
 	reconstructed := bytes.Join(shards[:c.k], nil)
@@ -113,6 +111,15 @@ func (c *Coder) Decode(shards [][]byte, originalSize int64) ([]byte, error) {
 		return nil, errors.New("erasure: original size exceeds reconstructed payload")
 	}
 	return reconstructed[:int(originalSize)], nil
+}
+
+func (c *Coder) ensureDataShardsReady(shards [][]byte) error {
+	for i := range c.k {
+		if len(shards[i]) == 0 {
+			return fmt.Errorf("erasure: data shard %d was not reconstructed", i)
+		}
+	}
+	return nil
 }
 
 func availableShardSize(shards [][]byte) int {
@@ -124,17 +131,10 @@ func availableShardSize(shards [][]byte) int {
 	return 0
 }
 
-// Rebuild regenerates missing parity shards from remaining shards.
+// Rebuild regenerates missing data or parity shards from remaining shards.
 func (c *Coder) Rebuild(shards [][]byte) error {
-	for i := range shards {
-		if shards[i] != nil {
-			continue
-		}
-		shardSize := c.pool.ShardSize()
-		shards[i] = make([]byte, int(shardSize))
-	}
-	if err := c.scheme.Encode(shards); err != nil {
-		return fmt.Errorf("erasure: rebuild parity: %w", err)
+	if err := c.scheme.Reconstruct(shards); err != nil {
+		return fmt.Errorf("erasure: rebuild shards: %w", err)
 	}
 	return nil
 }

@@ -30,7 +30,7 @@ type Engine struct {
 	parityChunks int
 	shardSize    int64
 	coder        *Coder
-	backend      *shardBackend
+	backend      ShardStore
 	layoutCache  sync.Map // string -> *Layout
 }
 
@@ -256,7 +256,10 @@ func (e *Engine) DeleteObjectLayout(ctx context.Context, bucket, key string) err
 	if layoutID == "" {
 		layoutID = layoutHash(layoutKey(bucket, key))
 	}
-	return e.backend.DeleteMeta(layout.ShardDir, layoutID)
+	if err := e.backend.DeleteMeta(layout.ShardDir, layoutID); err != nil {
+		return fmt.Errorf("engine: delete object layout meta: %w", err)
+	}
+	return nil
 }
 
 // CheckHealth checks the health of a shard set.
