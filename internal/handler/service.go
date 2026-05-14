@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lyonbrown4d/maxio/internal/discovery"
 	raftx "github.com/lyonbrown4d/maxio/internal/raft"
 	maxios3 "github.com/lyonbrown4d/maxio/internal/s3"
 	"github.com/lyonbrown4d/maxio/object"
@@ -18,24 +19,28 @@ import (
 
 const defaultSearchPath = "/_search"
 const defaultClusterMembersPath = "/_cluster/members"
+const defaultDiscoveryPath = "/_cluster/discovery"
 
 type Service struct {
-	logger  *slog.Logger
-	objects *object.Service
-	raft    *raftx.Runtime
-	s3      *maxios3.Service
+	logger    *slog.Logger
+	objects   *object.Service
+	raft      *raftx.Runtime
+	discovery *discovery.Runtime
+	s3        *maxios3.Service
 }
 
 func NewService(
 	objects *object.Service,
 	raftRuntime *raftx.Runtime,
+	discoveryRuntime *discovery.Runtime,
 	logger *slog.Logger,
 ) *Service {
 	return &Service{
-		logger:  logger,
-		objects: objects,
-		raft:    raftRuntime,
-		s3:      maxios3.NewService(objects, logger),
+		logger:    logger,
+		objects:   objects,
+		raft:      raftRuntime,
+		discovery: discoveryRuntime,
+		s3:        maxios3.NewService(objects, logger),
 	}
 }
 
@@ -84,6 +89,11 @@ func (s *Service) handleControlRoute(w http.ResponseWriter, r *http.Request, rou
 
 	if route == strings.Trim(defaultClusterMembersPath, "/") {
 		s.handleClusterMembers(w, r)
+		return true
+	}
+
+	if route == strings.Trim(defaultDiscoveryPath, "/") {
+		s.handleDiscovery(w, r)
 		return true
 	}
 

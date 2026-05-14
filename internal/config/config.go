@@ -16,18 +16,21 @@ import (
 const defaultConfigPath = "./config.json"
 
 type Config struct {
-	HTTPAddress          string `json:"http_address"         koanf:"http_address"         validate:"required,min=1"`
-	DataDir              string `json:"data_dir"             koanf:"data_dir"             validate:"required,min=1"`
-	LogLevel             string `json:"log_level"            koanf:"log_level"            validate:"required,oneof=debug info warn error"`
-	RaftNodeID           uint64 `json:"raft_node_id"         koanf:"raft_node_id"`
-	RaftShardID          uint64 `json:"raft_shard_id"        koanf:"raft_shard_id"`
-	RaftAddress          string `json:"raft_address"         koanf:"raft_address"`
-	RaftDataDir          string `json:"raft_data_dir"        koanf:"raft_data_dir"`
-	RaftBootstrap        bool   `json:"raft_bootstrap"       koanf:"raft_bootstrap"`
-	RaftJoin             bool   `json:"raft_join"            koanf:"raft_join"`
-	RaftInitialMembers   string `json:"raft_initial_members" koanf:"raft_initial_members"`
-	RaftOperationTimeout string `json:"raft_operation_timeout" koanf:"raft_operation_timeout" validate:"required,min=1"`
-	PendingObjectTTL     string `json:"pending_object_ttl"   koanf:"pending_object_ttl"   validate:"required,min=1"`
+	HTTPAddress            string `json:"http_address"         koanf:"http_address"         validate:"required,min=1"`
+	DataDir                string `json:"data_dir"             koanf:"data_dir"             validate:"required,min=1"`
+	LogLevel               string `json:"log_level"            koanf:"log_level"            validate:"required,oneof=debug info warn error"`
+	RaftNodeID             uint64 `json:"raft_node_id"         koanf:"raft_node_id"`
+	RaftShardID            uint64 `json:"raft_shard_id"        koanf:"raft_shard_id"`
+	RaftAddress            string `json:"raft_address"         koanf:"raft_address"`
+	RaftDataDir            string `json:"raft_data_dir"        koanf:"raft_data_dir"`
+	RaftBootstrap          bool   `json:"raft_bootstrap"       koanf:"raft_bootstrap"`
+	RaftJoin               bool   `json:"raft_join"            koanf:"raft_join"`
+	RaftInitialMembers     string `json:"raft_initial_members" koanf:"raft_initial_members"`
+	RaftOperationTimeout   string `json:"raft_operation_timeout" koanf:"raft_operation_timeout" validate:"required,min=1"`
+	GossipBindAddress      string `json:"gossip_bind_address" koanf:"gossip_bind_address" validate:"required,min=1"`
+	GossipAdvertiseAddress string `json:"gossip_advertise_address" koanf:"gossip_advertise_address"`
+	GossipSeeds            string `json:"gossip_seeds" koanf:"gossip_seeds"`
+	PendingObjectTTL       string `json:"pending_object_ttl"   koanf:"pending_object_ttl"   validate:"required,min=1"`
 }
 
 func Default() Config {
@@ -41,6 +44,7 @@ func Default() Config {
 		RaftDataDir:          "raft",
 		RaftBootstrap:        true,
 		RaftOperationTimeout: "5s",
+		GossipBindAddress:    "0.0.0.0:7946",
 		PendingObjectTTL:     "1h",
 	}
 }
@@ -131,6 +135,9 @@ func trim(cfg Config) Config {
 	cfg.RaftDataDir = strings.TrimSpace(cfg.RaftDataDir)
 	cfg.RaftInitialMembers = strings.TrimSpace(cfg.RaftInitialMembers)
 	cfg.RaftOperationTimeout = strings.TrimSpace(cfg.RaftOperationTimeout)
+	cfg.GossipBindAddress = strings.TrimSpace(cfg.GossipBindAddress)
+	cfg.GossipAdvertiseAddress = strings.TrimSpace(cfg.GossipAdvertiseAddress)
+	cfg.GossipSeeds = strings.TrimSpace(cfg.GossipSeeds)
 	cfg.PendingObjectTTL = strings.TrimSpace(cfg.PendingObjectTTL)
 	return cfg
 }
@@ -144,6 +151,9 @@ func validateRequired(cfg Config) error {
 	}
 	if cfg.RaftAddress == "" {
 		return errors.New("invalid config: raft_address is required")
+	}
+	if cfg.GossipBindAddress == "" {
+		return errors.New("invalid config: gossip_bind_address is required")
 	}
 	return nil
 }
@@ -163,6 +173,9 @@ func applyZeroDefaults(cfg Config) Config {
 	}
 	if cfg.RaftOperationTimeout == "" {
 		cfg.RaftOperationTimeout = Default().RaftOperationTimeout
+	}
+	if cfg.GossipBindAddress == "" {
+		cfg.GossipBindAddress = Default().GossipBindAddress
 	}
 	return cfg
 }

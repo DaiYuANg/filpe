@@ -11,6 +11,7 @@ import (
 	"github.com/arcgolabs/configx"
 	"github.com/arcgolabs/dix"
 	"github.com/lyonbrown4d/maxio/internal/config"
+	"github.com/lyonbrown4d/maxio/internal/discovery"
 	"github.com/lyonbrown4d/maxio/internal/engine"
 	"github.com/lyonbrown4d/maxio/internal/handler"
 	"github.com/lyonbrown4d/maxio/internal/http"
@@ -240,6 +241,7 @@ func defaultModules(configOptions ...configx.Option) []dix.Module {
 	return []dix.Module{
 		config.Module(configOptions...),
 		raft.Module(),
+		discovery.Module(),
 		metadata.Module(),
 		engine.Module(),
 		store.Module(),
