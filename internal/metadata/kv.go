@@ -1,0 +1,280 @@
+// Package metadata provides metadata persistence abstractions and implementations
+// for object/bucket/index state used by maxio.
+package metadata
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/arcgolabs/collectionx/list"
+	"github.com/lyonbrown4d/maxio/internal/model"
+)
+
+var (
+	ErrBadRequest     = errors.New("bad request")
+	ErrBucketExists   = errors.New("bucket already exists")
+	ErrBucketNotFound = errors.New("bucket not found")
+	ErrObjectNotFound = errors.New("object not found")
+)
+
+type BlobRef struct {
+	Path     string
+	RefCount int
+	Size     int64
+}
+
+type MetadataStore interface {
+	ListBuckets(ctx context.Context) ([]model.Bucket, error)
+	BucketExists(ctx context.Context, bucket string) (bool, error)
+	CreateBucket(ctx context.Context, bucket string) error
+	DeleteBucket(ctx context.Context, bucket string) error
+
+	ListObjectMetas(ctx context.Context, bucket string, prefix string) ([]model.ObjectMeta, error)
+	GetObjectMeta(ctx context.Context, bucket string, key string) (model.ObjectMeta, bool, error)
+	UpsertObjectMeta(ctx context.Context, meta model.ObjectMeta) error
+	DeleteObjectMeta(ctx context.Context, bucket string, key string) (model.ObjectMeta, bool, error)
+
+	GetBlobRef(ctx context.Context, hash string) (BlobRef, bool, error)
+	CreateBlobRef(ctx context.Context, hash string, path string, size int64) error
+	IncreaseBlobRef(ctx context.Context, hash string) error
+	DecreaseBlobRef(ctx context.Context, hash string) (string, bool, error)
+}
+
+type InMemoryMetadata struct {
+	mu      sync.RWMutex
+	buckets map[string]map[string]struct{}
+	objects map[string]model.ObjectMeta
+	blobs   map[string]BlobRef
+}
+
+func NewInMemoryMetadata() *InMemoryMetadata {
+	return &InMemoryMetadata{
+		buckets: make(map[string]map[string]struct{}),
+		objects: make(map[string]model.ObjectMeta),
+		blobs:   make(map[string]BlobRef),
+	}
+}
+
+func (m *InMemoryMetadata) ListBuckets(context.Context) ([]model.Bucket, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	now := time.Now().UTC()
+	buckets := list.NewListWithCapacity[model.Bucket](len(m.buckets))
+	for name := range m.buckets {
+		buckets.Add(model.Bucket{
+			Name:      name,
+			CreatedAt: now,
+		})
+	}
+	sorted := buckets.Sort(func(left, right model.Bucket) int {
+		if left.Name < right.Name {
+			return -1
+		}
+		if left.Name > right.Name {
+			return 1
+		}
+		return 0
+	})
+	return sorted.Values(), nil
+}
+
+func (m *InMemoryMetadata) BucketExists(_ context.Context, bucket string) (bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	bucket = strings.TrimSpace(bucket)
+	if bucket == "" {
+		return false, ErrBadRequest
+	}
+	_, ok := m.buckets[bucket]
+	return ok, nil
+}
+
+func (m *InMemoryMetadata) CreateBucket(_ context.Context, bucket string) error {
+	bucket = strings.TrimSpace(bucket)
+	if bucket == "" {
+		return ErrBadRequest
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.buckets[bucket]; ok {
+		return ErrBucketExists
+	}
+	m.buckets[bucket] = make(map[string]struct{})
+	return nil
+}
+
+func (m *InMemoryMetadata) DeleteBucket(_ context.Context, bucket string) error {
+	bucket = strings.TrimSpace(bucket)
+	if bucket == "" {
+		return ErrBadRequest
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	keys, ok := m.buckets[bucket]
+	if !ok {
+		return ErrBucketNotFound
+	}
+	for key := range keys {
+		id := objectID(bucket, key)
+		meta := m.objects[id]
+		delete(m.objects, id)
+		if _, _, err := m.decreaseBlobRefLocked(meta.Hash); err != nil && !errors.Is(err, ErrObjectNotFound) {
+			return err
+		}
+	}
+	delete(m.buckets, bucket)
+	return nil
+}
+
+func (m *InMemoryMetadata) ListObjectMetas(_ context.Context, bucket string, prefix string) ([]model.ObjectMeta, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	bucket = strings.TrimSpace(bucket)
+	if bucket == "" {
+		return nil, ErrBadRequest
+	}
+	keys, ok := m.buckets[bucket]
+	if !ok {
+		return nil, ErrBucketNotFound
+	}
+
+	result := list.NewListWithCapacity[model.ObjectMeta](len(keys))
+	for key := range keys {
+		if strings.HasPrefix(key, prefix) {
+			meta := m.objects[objectID(bucket, key)]
+			result.Add(meta)
+		}
+	}
+	sorted := result.Sort(func(left, right model.ObjectMeta) int {
+		if left.Key < right.Key {
+			return -1
+		}
+		if left.Key > right.Key {
+			return 1
+		}
+		return 0
+	})
+	return sorted.Values(), nil
+}
+
+func (m *InMemoryMetadata) GetObjectMeta(_ context.Context, bucket string, key string) (model.ObjectMeta, bool, error) {
+	bucket = strings.TrimSpace(bucket)
+	key = strings.TrimSpace(key)
+	if bucket == "" || key == "" {
+		return model.ObjectMeta{}, false, ErrBadRequest
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	meta, ok := m.objects[objectID(bucket, key)]
+	if !ok {
+		return model.ObjectMeta{}, false, nil
+	}
+	return meta, true, nil
+}
+
+func (m *InMemoryMetadata) UpsertObjectMeta(_ context.Context, meta model.ObjectMeta) error {
+	meta.Bucket = strings.TrimSpace(meta.Bucket)
+	meta.Key = strings.TrimSpace(meta.Key)
+	if meta.Bucket == "" || meta.Key == "" {
+		return ErrBadRequest
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	keys, ok := m.buckets[meta.Bucket]
+	if !ok {
+		return ErrBucketNotFound
+	}
+	keys[meta.Key] = struct{}{}
+	m.objects[objectID(meta.Bucket, meta.Key)] = meta
+	return nil
+}
+
+func (m *InMemoryMetadata) DeleteObjectMeta(_ context.Context, bucket string, key string) (model.ObjectMeta, bool, error) {
+	bucket = strings.TrimSpace(bucket)
+	key = strings.TrimSpace(key)
+	if bucket == "" || key == "" {
+		return model.ObjectMeta{}, false, ErrBadRequest
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	id := objectID(bucket, key)
+	meta, ok := m.objects[id]
+	if !ok {
+		return model.ObjectMeta{}, false, nil
+	}
+	delete(m.objects, id)
+	if keys, ok := m.buckets[bucket]; ok {
+		delete(keys, key)
+	}
+	return meta, true, nil
+}
+
+func (m *InMemoryMetadata) GetBlobRef(_ context.Context, hash string) (BlobRef, bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	ref, ok := m.blobs[hash]
+	return ref, ok, nil
+}
+
+func (m *InMemoryMetadata) CreateBlobRef(_ context.Context, hash string, path string, size int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.blobs[hash]; ok {
+		return nil
+	}
+	m.blobs[hash] = BlobRef{
+		Path:     path,
+		RefCount: 1,
+		Size:     size,
+	}
+	return nil
+}
+
+func (m *InMemoryMetadata) IncreaseBlobRef(_ context.Context, hash string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ref, ok := m.blobs[hash]
+	if !ok {
+		return ErrObjectNotFound
+	}
+	ref.RefCount++
+	m.blobs[hash] = ref
+	return nil
+}
+
+func (m *InMemoryMetadata) DecreaseBlobRef(_ context.Context, hash string) (string, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.decreaseBlobRefLocked(hash)
+}
+
+func (m *InMemoryMetadata) decreaseBlobRefLocked(hash string) (string, bool, error) {
+	ref, ok := m.blobs[hash]
+	if !ok {
+		return "", false, ErrObjectNotFound
+	}
+	ref.RefCount--
+	if ref.RefCount <= 0 {
+		delete(m.blobs, hash)
+		return ref.Path, true, nil
+	}
+	m.blobs[hash] = ref
+	return ref.Path, false, nil
+}
+
+func objectID(bucket, key string) string {
+	return bucket + "\x00" + key
+}

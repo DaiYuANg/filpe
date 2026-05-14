@@ -76,3 +76,8 @@ Temporary Items
 .apdisk
 .idea
 *.redb
+data
+.cache/
+.gocache/
+.gomodcache/
+maxio.exe

@@ -1,0 +1,119 @@
+﻿package engine
+
+import (
+	"bytes"
+	"fmt"
+
+	"github.com/klauspost/reedsolomon"
+)
+
+// Coder encodes and decodes objects using Reed-Solomon erasure coding.
+// k = data chunks, m = parity chunks (configurable, defaults to MinIO: 9+3)
+type Coder struct {
+	k      int
+	m      int
+	pool   *shardBackend
+	scheme reedsolomon.Encoder
+}
+
+// CoderConfig holds parameters for constructing a Coder.
+type CoderConfig struct {
+	DataChunks   int
+	ParityChunks int
+	ShardPool    *shardBackend
+}
+
+func (cfg CoderConfig) validate() error {
+	if cfg.DataChunks < 1 {
+		return fmt.Errorf("erasure: data chunks must be >= 1")
+	}
+	if cfg.ParityChunks < 1 {
+		return fmt.Errorf("erasure: parity chunks must be >= 1")
+	}
+	if cfg.ShardPool == nil {
+		return fmt.Errorf("erasure: shard pool must be non-nil")
+	}
+	return nil
+}
+
+func newCoder(cfg CoderConfig) (*Coder, error) {
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
+	scheme, err := reedsolomon.New(cfg.DataChunks, cfg.ParityChunks)
+	if err != nil {
+		return nil, fmt.Errorf("erasure: create encoder: %w", err)
+	}
+	return &Coder{
+		k:      cfg.DataChunks,
+		m:      cfg.ParityChunks,
+		pool:   cfg.ShardPool,
+		scheme: scheme,
+	}, nil
+}
+
+func (c *Coder) DataChunks() int      { return c.k }
+func (c *Coder) ParityChunks() int    { return c.m }
+func (c *Coder) TotalChunks() int     { return c.k + c.m }
+func (c *Coder) Pool() *shardBackend  { return c.pool }
+
+// Encode encodes a single object, splitting it into k data shards and m parity shards.
+func (c *Coder) Encode(data []byte) ([][]byte, error) {
+	numChunks := c.TotalChunks()
+	shardSize := (len(data) + c.k - 1) / c.k
+	padded := make([][]byte, numChunks)
+	for i := 0; i < numChunks; i++ {
+		padded[i] = make([]byte, shardSize)
+	}
+	for i := 0; i < c.k; i++ {
+		start := i * shardSize
+		end := start + shardSize
+		if end > len(data) {
+			end = len(data)
+		}
+		copy(padded[i], data[start:end])
+	}
+	// Fill remaining data shard slots with zeros
+	for i := 0; i < c.k; i++ {
+		start := i * shardSize
+		if start >= len(data) {
+			padded[i] = make([]byte, shardSize)
+		}
+	}
+	if err := c.scheme.Encode(padded); err != nil {
+		return nil, fmt.Errorf("erasure: encode data: %w", err)
+	}
+	return padded, nil
+}
+
+// Decode reconstructs the original data from shards. At most m shards may be missing.
+func (c *Coder) Decode(shards [][]byte) ([]byte, error) {
+	for i := range shards {
+		if shards[i] == nil {
+			shardSize := len(shards[0])
+			shards[i] = make([]byte, shardSize)
+		}
+	}
+	if err := c.scheme.Reconstruct(shards); err != nil {
+		return nil, fmt.Errorf("erasure: decode data: %w", err)
+	}
+	// Reassemble: concatenate k data shards, strip padding
+	reconstructed := bytes.Join(shards[:c.k], nil)
+	reconstructed = bytes.TrimRight(reconstructed, "\x00")
+	return reconstructed, nil
+}
+
+// Rebuild regenerates missing parity shards from remaining shards.
+func (c *Coder) Rebuild(shards [][]byte) error {
+	for i := range shards {
+		if shards[i] != nil {
+			continue
+		}
+		shardSize := c.pool.ShardSize()
+		shards[i] = make([]byte, int(shardSize))
+	}
+	if err := c.scheme.Encode(shards); err != nil {
+		return fmt.Errorf("erasure: rebuild parity: %w", err)
+	}
+	return nil
+}
