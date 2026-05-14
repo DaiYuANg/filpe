@@ -147,12 +147,13 @@ func (r *RaftMetadata) GetBlobRef(ctx context.Context, hash string) (BlobRef, bo
 	return fromRaftBlobRef(result.Blob), result.BlobExists, nil
 }
 
-func (r *RaftMetadata) CreateBlobRef(ctx context.Context, hash, path string, size int64) error {
+func (r *RaftMetadata) CreateBlobRef(ctx context.Context, hash, path string, size int64, placements []model.ShardPlacement) error {
 	_, err := r.runtime.ProposeMetadata(ctx, raftx.MetadataCommand{
 		Type: raftx.MetadataCommandCreateBlobRef,
 		Hash: hash,
 		Path: path,
 		Size: size,
+		ShardPlacements: placements,
 	})
 	return mapRaftError(err)
 }
@@ -196,8 +197,9 @@ func mapRaftError(err error) error {
 
 func fromRaftBlobRef(ref raftx.MetadataBlobRef) BlobRef {
 	return BlobRef{
-		Path:     ref.Path,
-		RefCount: ref.RefCount,
-		Size:     ref.Size,
+		Path:            ref.Path,
+		ShardPlacements: ref.ShardPlacements,
+		RefCount:        ref.RefCount,
+		Size:            ref.Size,
 	}
 }

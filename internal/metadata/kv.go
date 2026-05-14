@@ -21,9 +21,10 @@ var (
 )
 
 type BlobRef struct {
-	Path     string
-	RefCount int
-	Size     int64
+	Path            string
+	ShardPlacements []model.ShardPlacement
+	RefCount        int
+	Size            int64
 }
 
 type MetadataStore interface {
@@ -41,7 +42,7 @@ type MetadataStore interface {
 	DeleteObjectMeta(ctx context.Context, bucket, key string) (model.ObjectMeta, bool, error)
 
 	GetBlobRef(ctx context.Context, hash string) (BlobRef, bool, error)
-	CreateBlobRef(ctx context.Context, hash, path string, size int64) error
+	CreateBlobRef(ctx context.Context, hash, path string, size int64, placements []model.ShardPlacement) error
 	IncreaseBlobRef(ctx context.Context, hash string) error
 	DecreaseBlobRef(ctx context.Context, hash string) (string, bool, error)
 }
@@ -241,16 +242,17 @@ func (m *InMemoryMetadata) GetBlobRef(_ context.Context, hash string) (BlobRef, 
 	return ref, ok, nil
 }
 
-func (m *InMemoryMetadata) CreateBlobRef(_ context.Context, hash, path string, size int64) error {
+func (m *InMemoryMetadata) CreateBlobRef(_ context.Context, hash, path string, size int64, placements []model.ShardPlacement) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.blobs[hash]; ok {
 		return nil
 	}
 	m.blobs[hash] = BlobRef{
-		Path:     path,
-		RefCount: 1,
-		Size:     size,
+		Path:            path,
+		ShardPlacements: cloneBlobRefPlacements(placements),
+		RefCount:        1,
+		Size:            size,
 	}
 	return nil
 }

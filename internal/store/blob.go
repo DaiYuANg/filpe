@@ -23,10 +23,11 @@ func (s *Store) prepareBlob(
 	}
 	if exists {
 		return engine.BlobInfo{
-			Hash:     staged.hash,
-			ETag:     engine.ETagFromHash(staged.hash),
-			Size:     ref.Size,
-			ShardDir: ref.Path,
+			Hash:            staged.hash,
+			ETag:            engine.ETagFromHash(staged.hash),
+			Size:            ref.Size,
+			ShardDir:        ref.Path,
+			ShardPlacements: ref.ShardPlacements,
 		}, true, false, nil
 	}
 	return s.createBlob(ctx, key, staged)
@@ -55,7 +56,7 @@ func (s *Store) retainBlob(
 	sameObjectBlob bool,
 ) (blobRefMutation, error) {
 	if !refExists {
-		if err := s.meta.CreateBlobRef(ctx, hash, blob.ShardDir, blob.Size); err != nil {
+		if err := s.meta.CreateBlobRef(ctx, hash, blob.ShardDir, blob.Size, blob.ShardPlacements); err != nil {
 			return blobRefUnchanged, mapStoreError(err)
 		}
 		return blobRefCreated, nil

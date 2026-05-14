@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/lyonbrown4d/maxio/internal/model"
@@ -61,6 +62,56 @@ func (planner *SingleNodePlacementPlanner) Plan(ctx context.Context, request Pla
 	return PlacementPlan{Shards: placements}, nil
 }
 
+type RoundRobinPlacementPlanner struct {
+	localNodeID string
+	nodes       []StorageNode
+}
+
+func NewRoundRobinPlacementPlanner(localNodeID string, nodes ...StorageNode) *RoundRobinPlacementPlanner {
+	normalized := make([]StorageNode, 0, len(nodes))
+	for _, node := range nodes {
+		if node != nil && strings.TrimSpace(node.ID()) != "" {
+			normalized = append(normalized, node)
+		}
+	}
+	sort.SliceStable(normalized, func(left, right int) bool {
+		return normalized[left].ID() < normalized[right].ID()
+	})
+	return &RoundRobinPlacementPlanner{
+		localNodeID: strings.TrimSpace(localNodeID),
+		nodes:       cloneStorageNodes(normalized),
+	}
+}
+
+func (planner *RoundRobinPlacementPlanner) Plan(ctx context.Context, request PlacementRequest) (PlacementPlan, error) {
+	if planner == nil {
+		return PlacementPlan{}, errors.New("placement planner is required")
+	}
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return PlacementPlan{}, fmt.Errorf("plan shard placement context: %w", err)
+		}
+	}
+	if request.ShardCount < 1 {
+		return PlacementPlan{}, errors.New("placement shard count must be greater than zero")
+	}
+	if len(planner.nodes) == 0 {
+		return PlacementPlan{}, errors.New("placement planner needs at least one storage node")
+	}
+	placements := make([]model.ShardPlacement, request.ShardCount)
+	for index := range placements {
+		node := planner.nodes[index%len(planner.nodes)]
+		nodeID := strings.TrimSpace(node.ID())
+		placements[index] = model.ShardPlacement{
+			Index:       index,
+			NodeID:      nodeID,
+			NodeAddress: strings.TrimSpace(node.Address()),
+			Local:       nodeID != "" && nodeID == planner.localNodeID,
+		}
+	}
+	return PlacementPlan{Shards: placements}, nil
+}
+
 func (e *Engine) ConfigureLocalNode(id, address string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -78,10 +129,8 @@ func (e *Engine) configureLocalNodeLocked(id, address string) {
 	}
 	node := NewLocalStorageNode(id, address, e.backend)
 	e.localNodeID = node.ID()
-	e.nodes = map[string]StorageNode{
-		node.ID(): node,
-	}
-	e.planner = NewSingleNodePlacementPlanner(node)
+	e.nodes = map[string]StorageNode{}
+	e.registerStorageNodeLocked(node)
 }
 
 func (e *Engine) PlanShardPlacement(ctx context.Context, request PlacementRequest) ([]model.ShardPlacement, error) {
