@@ -1,9 +1,12 @@
+//revive:disable:file-length-limit
 package raft
 
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -43,8 +46,8 @@ type MetadataCommand struct {
 	Type       string           `json:"type"`
 	Bucket     string           `json:"bucket,omitempty"`
 	Key        string           `json:"key,omitempty"`
-	BucketMeta model.Bucket     `json:"bucket_meta,omitempty"`
-	Meta       model.ObjectMeta `json:"meta,omitempty"`
+	BucketMeta model.Bucket     `json:"bucket_meta"`
+	Meta       model.ObjectMeta `json:"meta"`
 	Hash       string           `json:"hash,omitempty"`
 	Path       string           `json:"path,omitempty"`
 	Size       int64            `json:"size,omitempty"`
@@ -62,9 +65,9 @@ type MetadataResult struct {
 	Buckets      []model.Bucket     `json:"buckets,omitempty"`
 	BucketExists bool               `json:"bucket_exists,omitempty"`
 	Objects      []model.ObjectMeta `json:"objects,omitempty"`
-	Object       model.ObjectMeta   `json:"object,omitempty"`
+	Object       model.ObjectMeta   `json:"object"`
 	ObjectExists bool               `json:"object_exists,omitempty"`
-	Blob         MetadataBlobRef    `json:"blob,omitempty"`
+	Blob         MetadataBlobRef    `json:"blob"`
 	BlobExists   bool               `json:"blob_exists,omitempty"`
 	BlobPath     string             `json:"blob_path,omitempty"`
 	BlobRemoved  bool               `json:"blob_removed,omitempty"`
@@ -92,7 +95,7 @@ type raftStateMachine struct {
 	blobRefs map[string]MetadataBlobRef
 }
 
-func newRaftStateMachine(shardID uint64, replicaID uint64) *raftStateMachine {
+func newRaftStateMachine(shardID, replicaID uint64) *raftStateMachine {
 	return &raftStateMachine{
 		shardID:   shardID,
 		replicaID: replicaID,
@@ -153,17 +156,20 @@ func (s *raftStateMachine) SaveSnapshot(w io.Writer, _ dbsm.ISnapshotFileCollect
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return json.NewEncoder(w).Encode(metadataSnapshot{
+	if err := json.NewEncoder(w).Encode(metadataSnapshot{
 		Buckets:  copyBucketMap(s.buckets),
 		Objects:  copyObjectMap(s.objects),
 		BlobRefs: copyBlobRefMap(s.blobRefs),
-	})
+	}); err != nil {
+		return fmt.Errorf("encode metadata snapshot: %w", err)
+	}
+	return nil
 }
 
 func (s *raftStateMachine) RecoverFromSnapshot(r io.Reader, _ []dbsm.SnapshotFile, _ <-chan struct{}) error {
 	var snapshot metadataSnapshot
 	if err := json.NewDecoder(r).Decode(&snapshot); err != nil {
-		return err
+		return fmt.Errorf("decode metadata snapshot: %w", err)
 	}
 
 	s.mu.Lock()
@@ -218,31 +224,47 @@ func (s *raftStateMachine) lookupMetadataQuery(query MetadataQuery) metadataEnve
 	case MetadataQueryListBuckets:
 		return metadataEnvelope{Result: MetadataResult{Buckets: s.listBuckets()}}
 	case MetadataQueryBucketExists:
-		if invalidName(query.Bucket) {
-			return metadataEnvelope{Error: MetadataErrorBadRequest}
-		}
-		_, ok := s.buckets[query.Bucket]
-		return metadataEnvelope{Result: MetadataResult{BucketExists: ok}}
+		return s.lookupBucketExists(query.Bucket)
 	case MetadataQueryListObjectMetas:
-		if _, ok := s.buckets[query.Bucket]; !ok {
-			return metadataEnvelope{Error: MetadataErrorBucketNotFound}
-		}
-		return metadataEnvelope{Result: MetadataResult{Objects: s.listObjectMetas(query.Bucket, query.Prefix)}}
+		return s.lookupListObjectMetas(query.Bucket, query.Prefix)
 	case MetadataQueryGetObjectMeta:
-		if invalidObject(query.Bucket, query.Key) {
-			return metadataEnvelope{Error: MetadataErrorBadRequest}
-		}
-		meta, ok := s.objects[objectMapKey(query.Bucket, query.Key)]
-		return metadataEnvelope{Result: MetadataResult{Object: meta, ObjectExists: ok}}
+		return s.lookupObjectMeta(query.Bucket, query.Key)
 	case MetadataQueryGetBlobRef:
-		if invalidName(query.Hash) {
-			return metadataEnvelope{Error: MetadataErrorBadRequest}
-		}
-		ref, ok := s.blobRefs[query.Hash]
-		return metadataEnvelope{Result: MetadataResult{Blob: ref, BlobExists: ok}}
+		return s.lookupBlobRef(query.Hash)
 	default:
 		return metadataEnvelope{Error: MetadataErrorBadRequest}
 	}
+}
+
+func (s *raftStateMachine) lookupBucketExists(bucket string) metadataEnvelope {
+	if invalidName(bucket) {
+		return metadataEnvelope{Error: MetadataErrorBadRequest}
+	}
+	_, ok := s.buckets[bucket]
+	return metadataEnvelope{Result: MetadataResult{BucketExists: ok}}
+}
+
+func (s *raftStateMachine) lookupListObjectMetas(bucket, prefix string) metadataEnvelope {
+	if _, ok := s.buckets[bucket]; !ok {
+		return metadataEnvelope{Error: MetadataErrorBucketNotFound}
+	}
+	return metadataEnvelope{Result: MetadataResult{Objects: s.listObjectMetas(bucket, prefix)}}
+}
+
+func (s *raftStateMachine) lookupObjectMeta(bucket, key string) metadataEnvelope {
+	if invalidObject(bucket, key) {
+		return metadataEnvelope{Error: MetadataErrorBadRequest}
+	}
+	meta, ok := s.objects[objectMapKey(bucket, key)]
+	return metadataEnvelope{Result: MetadataResult{Object: meta, ObjectExists: ok}}
+}
+
+func (s *raftStateMachine) lookupBlobRef(hash string) metadataEnvelope {
+	if invalidName(hash) {
+		return metadataEnvelope{Error: MetadataErrorBadRequest}
+	}
+	ref, ok := s.blobRefs[hash]
+	return metadataEnvelope{Result: MetadataResult{Blob: ref, BlobExists: ok}}
 }
 
 func (s *raftStateMachine) createBucket(bucket string, bucketMeta model.Bucket) (MetadataResult, string) {
@@ -289,7 +311,7 @@ func (s *raftStateMachine) upsertObjectMeta(meta model.ObjectMeta) (MetadataResu
 	return MetadataResult{}, ""
 }
 
-func (s *raftStateMachine) deleteObjectMeta(bucket string, key string) (MetadataResult, string) {
+func (s *raftStateMachine) deleteObjectMeta(bucket, key string) (MetadataResult, string) {
 	if invalidObject(bucket, key) {
 		return MetadataResult{}, MetadataErrorBadRequest
 	}
@@ -302,7 +324,7 @@ func (s *raftStateMachine) deleteObjectMeta(bucket string, key string) (Metadata
 	return MetadataResult{Object: meta, ObjectExists: true}, ""
 }
 
-func (s *raftStateMachine) createBlobRef(hash string, path string, size int64) (MetadataResult, string) {
+func (s *raftStateMachine) createBlobRef(hash, path string, size int64) (MetadataResult, string) {
 	if invalidName(hash) || strings.TrimSpace(path) == "" {
 		return MetadataResult{}, MetadataErrorBadRequest
 	}
@@ -356,7 +378,7 @@ func (s *raftStateMachine) listBuckets() []model.Bucket {
 	return buckets
 }
 
-func (s *raftStateMachine) listObjectMetas(bucket string, prefix string) []model.ObjectMeta {
+func (s *raftStateMachine) listObjectMetas(bucket, prefix string) []model.ObjectMeta {
 	objects := make([]model.ObjectMeta, 0)
 	for _, meta := range s.objects {
 		if meta.Bucket == bucket && strings.HasPrefix(meta.Key, prefix) {
@@ -372,7 +394,7 @@ func (s *raftStateMachine) listObjectMetas(bucket string, prefix string) []model
 func encodeMetadataEnvelope(envelope metadataEnvelope) (dbsm.Result, error) {
 	data, err := json.Marshal(envelope)
 	if err != nil {
-		return dbsm.Result{}, err
+		return dbsm.Result{}, fmt.Errorf("marshal metadata result: %w", err)
 	}
 	return dbsm.Result{Data: data}, nil
 }
@@ -383,7 +405,7 @@ func decodeMetadataEnvelope(data []byte) (MetadataResult, error) {
 	}
 	var envelope metadataEnvelope
 	if err := json.Unmarshal(data, &envelope); err != nil {
-		return MetadataResult{}, err
+		return MetadataResult{}, fmt.Errorf("unmarshal metadata result: %w", err)
 	}
 	if envelope.Error != "" {
 		return envelope.Result, metadataError(envelope.Error)
@@ -431,34 +453,28 @@ func invalidName(value string) bool {
 	return strings.TrimSpace(value) == ""
 }
 
-func invalidObject(bucket string, key string) bool {
+func invalidObject(bucket, key string) bool {
 	return invalidName(bucket) || strings.TrimSpace(key) == ""
 }
 
-func objectMapKey(bucket string, key string) string {
+func objectMapKey(bucket, key string) string {
 	return bucket + "\x00" + key
 }
 
 func copyBucketMap(input map[string]model.Bucket) map[string]model.Bucket {
 	output := make(map[string]model.Bucket, len(input))
-	for key, value := range input {
-		output[key] = value
-	}
+	maps.Copy(output, input)
 	return output
 }
 
 func copyObjectMap(input map[string]model.ObjectMeta) map[string]model.ObjectMeta {
 	output := make(map[string]model.ObjectMeta, len(input))
-	for key, value := range input {
-		output[key] = value
-	}
+	maps.Copy(output, input)
 	return output
 }
 
 func copyBlobRefMap(input map[string]MetadataBlobRef) map[string]MetadataBlobRef {
 	output := make(map[string]MetadataBlobRef, len(input))
-	for key, value := range input {
-		output[key] = value
-	}
+	maps.Copy(output, input)
 	return output
 }

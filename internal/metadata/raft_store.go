@@ -58,7 +58,7 @@ func (r *RaftMetadata) DeleteBucket(ctx context.Context, bucket string) error {
 	return mapRaftError(err)
 }
 
-func (r *RaftMetadata) ListObjectMetas(ctx context.Context, bucket string, prefix string) ([]model.ObjectMeta, error) {
+func (r *RaftMetadata) ListObjectMetas(ctx context.Context, bucket, prefix string) ([]model.ObjectMeta, error) {
 	result, err := r.runtime.ReadMetadata(ctx, raftx.MetadataQuery{
 		Type:   raftx.MetadataQueryListObjectMetas,
 		Bucket: bucket,
@@ -70,7 +70,7 @@ func (r *RaftMetadata) ListObjectMetas(ctx context.Context, bucket string, prefi
 	return result.Objects, nil
 }
 
-func (r *RaftMetadata) GetObjectMeta(ctx context.Context, bucket string, key string) (model.ObjectMeta, bool, error) {
+func (r *RaftMetadata) GetObjectMeta(ctx context.Context, bucket, key string) (model.ObjectMeta, bool, error) {
 	result, err := r.runtime.ReadMetadata(ctx, raftx.MetadataQuery{
 		Type:   raftx.MetadataQueryGetObjectMeta,
 		Bucket: bucket,
@@ -90,7 +90,7 @@ func (r *RaftMetadata) UpsertObjectMeta(ctx context.Context, meta model.ObjectMe
 	return mapRaftError(err)
 }
 
-func (r *RaftMetadata) DeleteObjectMeta(ctx context.Context, bucket string, key string) (model.ObjectMeta, bool, error) {
+func (r *RaftMetadata) DeleteObjectMeta(ctx context.Context, bucket, key string) (model.ObjectMeta, bool, error) {
 	result, err := r.runtime.ProposeMetadata(ctx, raftx.MetadataCommand{
 		Type:   raftx.MetadataCommandDeleteObjectMeta,
 		Bucket: bucket,
@@ -113,7 +113,7 @@ func (r *RaftMetadata) GetBlobRef(ctx context.Context, hash string) (BlobRef, bo
 	return fromRaftBlobRef(result.Blob), result.BlobExists, nil
 }
 
-func (r *RaftMetadata) CreateBlobRef(ctx context.Context, hash string, path string, size int64) error {
+func (r *RaftMetadata) CreateBlobRef(ctx context.Context, hash, path string, size int64) error {
 	_, err := r.runtime.ProposeMetadata(ctx, raftx.MetadataCommand{
 		Type: raftx.MetadataCommandCreateBlobRef,
 		Hash: hash,
