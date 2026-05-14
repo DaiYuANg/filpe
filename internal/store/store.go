@@ -27,6 +27,14 @@ type Store struct {
 	engine *engine.Engine
 }
 
+type blobRefMutation int
+
+const (
+	blobRefUnchanged blobRefMutation = iota
+	blobRefIncreased
+	blobRefCreated
+)
+
 func NewStore(dataDir string, meta metadata.MetadataStore, e *engine.Engine) (*Store, error) {
 	if meta == nil {
 		meta = metadata.NewInMemoryMetadata()
@@ -81,64 +89,52 @@ func (s *Store) ListObjects(ctx context.Context, bucket, prefix string) ([]model
 	return objects, mapStoreError(err)
 }
 
-func (s *Store) PutObject(ctx context.Context, bucket, key string, reader io.Reader, contentType string) (model.ObjectMeta, error) {
-	meta, err := s.engine.PutObject(ctx, bucket, key, reader, contentType)
-	if err != nil {
-		return model.ObjectMeta{}, fmt.Errorf("%w: %w", ErrEngineFailed, err)
-	}
-	// Also persist metadata
-	err = s.meta.UpsertObjectMeta(ctx, model.ObjectMeta{
-		Bucket:      meta.Bucket,
-		Key:         meta.Key,
-		Hash:        meta.Hash,
-		ETag:        meta.ETag,
-		Size:        meta.Size,
-		ContentType: meta.ContentType,
-		UpdatedAt:   meta.UpdatedAt,
-	})
-	if err != nil {
-		return model.ObjectMeta{}, fmt.Errorf("upsert object metadata: %w", mapStoreError(err))
-	}
-	return model.ObjectMeta{
-		Bucket:      meta.Bucket,
-		Key:         meta.Key,
-		Hash:        meta.Hash,
-		ETag:        meta.ETag,
-		Size:        meta.Size,
-		ContentType: meta.ContentType,
-		UpdatedAt:   meta.UpdatedAt,
-	}, nil
-}
-
 func (s *Store) GetObject(ctx context.Context, bucket, key string) (io.ReadCloser, model.ObjectMeta, error) {
-	reader, meta, err := s.engine.GetObject(ctx, bucket, key)
+	meta, exists, err := s.meta.GetObjectMeta(ctx, bucket, key)
 	if err != nil {
 		return nil, model.ObjectMeta{}, mapStoreError(err)
 	}
-	return reader, model.ObjectMeta{
-		Bucket:      meta.Bucket,
-		Key:         meta.Key,
-		Hash:        meta.Hash,
-		ETag:        meta.ETag,
-		Size:        meta.Size,
-		ContentType: meta.ContentType,
-		UpdatedAt:   meta.UpdatedAt,
-	}, nil
+	if !exists {
+		return nil, model.ObjectMeta{}, ErrNotFound
+	}
+
+	reader, _, err := s.engine.GetObject(ctx, bucket, key)
+	if err != nil {
+		return nil, model.ObjectMeta{}, mapStoreError(err)
+	}
+	return reader, meta, nil
+}
+
+func (s *Store) StatObject(ctx context.Context, bucket, key string) (model.ObjectMeta, error) {
+	meta, exists, err := s.meta.GetObjectMeta(ctx, bucket, key)
+	if err != nil {
+		return model.ObjectMeta{}, mapStoreError(err)
+	}
+	if !exists {
+		return model.ObjectMeta{}, ErrNotFound
+	}
+	return meta, nil
 }
 
 func (s *Store) DeleteObject(ctx context.Context, bucket, key string) (model.ObjectMeta, error) {
-	// Delete from engine
-	if err := s.engine.DeleteObject(ctx, bucket, key); err != nil {
-		return model.ObjectMeta{}, mapStoreError(err)
-	}
-	// Delete from metadata
-	objMeta, _, err := s.meta.GetObjectMeta(ctx, bucket, key)
+	objMeta, exists, err := s.meta.GetObjectMeta(ctx, bucket, key)
 	if err != nil {
 		return model.ObjectMeta{}, mapStoreError(err)
 	}
+	if !exists {
+		return model.ObjectMeta{}, ErrNotFound
+	}
+
 	_, _, err = s.meta.DeleteObjectMeta(ctx, bucket, key)
 	if err != nil {
 		return model.ObjectMeta{}, mapStoreError(err)
+	}
+	layoutErr := s.engine.DeleteObjectLayout(ctx, bucket, key)
+	if err := s.releaseBlob(ctx, objMeta.Hash); err != nil {
+		return model.ObjectMeta{}, err
+	}
+	if layoutErr != nil && !errors.Is(layoutErr, engine.ErrObjectNotFound) {
+		return model.ObjectMeta{}, mapStoreError(layoutErr)
 	}
 	return objMeta, nil
 }

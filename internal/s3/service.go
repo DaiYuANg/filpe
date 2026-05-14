@@ -149,7 +149,8 @@ func (s *Service) handleListObjects(w http.ResponseWriter, r *http.Request, buck
 		IsTruncated: false,
 		Contents:    make([]objectResult, 0, len(objects)),
 	}
-	for _, meta := range objects {
+	for i := range objects {
+		meta := objects[i]
 		result.Contents = append(result.Contents, objectResult{
 			Key:          meta.Key,
 			LastModified: formatS3Time(meta.UpdatedAt),

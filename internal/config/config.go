@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/arcgolabs/configx"
 )
@@ -25,18 +26,20 @@ type Config struct {
 	RaftBootstrap      bool   `json:"raft_bootstrap"       koanf:"raft_bootstrap"`
 	RaftJoin           bool   `json:"raft_join"            koanf:"raft_join"`
 	RaftInitialMembers string `json:"raft_initial_members" koanf:"raft_initial_members"`
+	PendingObjectTTL   string `json:"pending_object_ttl"   koanf:"pending_object_ttl"   validate:"required,min=1"`
 }
 
 func Default() Config {
 	return Config{
-		HTTPAddress:   ":8080",
-		DataDir:       "./data",
-		LogLevel:      "info",
-		RaftNodeID:    1,
-		RaftShardID:   1,
-		RaftAddress:   "127.0.0.1:63000",
-		RaftDataDir:   "raft",
-		RaftBootstrap: true,
+		HTTPAddress:      ":8080",
+		DataDir:          "./data",
+		LogLevel:         "info",
+		RaftNodeID:       1,
+		RaftShardID:      1,
+		RaftAddress:      "127.0.0.1:63000",
+		RaftDataDir:      "raft",
+		RaftBootstrap:    true,
+		PendingObjectTTL: "1h",
 	}
 }
 
@@ -96,26 +99,53 @@ func configFileOptions(path string) ([]configx.Option, error) {
 }
 
 func normalize(cfg Config) (Config, error) {
-	cfg.DataDir = strings.TrimSpace(cfg.DataDir)
+	cfg = trim(cfg)
 	if cfg.DataDir == "" {
 		return cfg, errors.New("invalid config: data_dir is required")
 	}
 	cfg.DataDir = filepath.Clean(cfg.DataDir)
+
+	if err := validateRequired(cfg); err != nil {
+		return cfg, err
+	}
+	cfg = applyZeroDefaults(cfg)
+	if err := validateDurations(cfg); err != nil {
+		return cfg, err
+	}
+	cfg.RaftDataDir = filepath.Clean(cfg.RaftDataDir)
+
+	if !filepath.IsAbs(cfg.RaftDataDir) {
+		cfg.RaftDataDir = filepath.Join(cfg.DataDir, cfg.RaftDataDir)
+	}
+
+	return cfg, nil
+}
+
+func trim(cfg Config) Config {
+	cfg.DataDir = strings.TrimSpace(cfg.DataDir)
 	cfg.HTTPAddress = strings.TrimSpace(cfg.HTTPAddress)
 	cfg.LogLevel = strings.TrimSpace(cfg.LogLevel)
 	cfg.RaftAddress = strings.TrimSpace(cfg.RaftAddress)
 	cfg.RaftDataDir = strings.TrimSpace(cfg.RaftDataDir)
 	cfg.RaftInitialMembers = strings.TrimSpace(cfg.RaftInitialMembers)
+	cfg.PendingObjectTTL = strings.TrimSpace(cfg.PendingObjectTTL)
+	return cfg
+}
 
+func validateRequired(cfg Config) error {
 	if cfg.HTTPAddress == "" {
-		return cfg, errors.New("invalid config: http_address is required")
+		return errors.New("invalid config: http_address is required")
 	}
 	if cfg.LogLevel == "" {
-		return cfg, errors.New("invalid config: log_level is required")
+		return errors.New("invalid config: log_level is required")
 	}
 	if cfg.RaftAddress == "" {
-		return cfg, errors.New("invalid config: raft_address is required")
+		return errors.New("invalid config: raft_address is required")
 	}
+	return nil
+}
+
+func applyZeroDefaults(cfg Config) Config {
 	if cfg.RaftNodeID == 0 {
 		cfg.RaftNodeID = 1
 	}
@@ -125,11 +155,23 @@ func normalize(cfg Config) (Config, error) {
 	if cfg.RaftDataDir == "" {
 		cfg.RaftDataDir = "raft"
 	}
-	cfg.RaftDataDir = filepath.Clean(cfg.RaftDataDir)
-
-	if !filepath.IsAbs(cfg.RaftDataDir) {
-		cfg.RaftDataDir = filepath.Join(cfg.DataDir, cfg.RaftDataDir)
+	if cfg.PendingObjectTTL == "" {
+		cfg.PendingObjectTTL = Default().PendingObjectTTL
 	}
+	return cfg
+}
 
-	return cfg, nil
+func validateDurations(cfg Config) error {
+	if _, err := time.ParseDuration(cfg.PendingObjectTTL); err != nil {
+		return fmt.Errorf("invalid config: pending_object_ttl: %w", err)
+	}
+	return nil
+}
+
+func (cfg Config) PendingObjectTTLDuration() time.Duration {
+	duration, err := time.ParseDuration(cfg.PendingObjectTTL)
+	if err != nil {
+		return time.Hour
+	}
+	return duration
 }

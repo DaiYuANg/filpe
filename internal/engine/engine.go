@@ -3,7 +3,6 @@ package engine
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,10 +48,11 @@ type ObjectMeta struct {
 // ObjectInfo is ObjectMeta + erasure coding info.
 type ObjectInfo struct {
 	ObjectMeta
-	DataChunks   int   `json:"data_chunks"`
-	ParityChunks int   `json:"parity_chunks"`
-	TotalChunks  int   `json:"total_chunks"`
-	ShardSize    int64 `json:"shard_size"`
+	DataChunks   int    `json:"data_chunks"`
+	ParityChunks int    `json:"parity_chunks"`
+	TotalChunks  int    `json:"total_chunks"`
+	ShardSize    int64  `json:"shard_size"`
+	ShardDir     string `json:"shard_dir"`
 }
 
 // Health reports the health of a shard set.
@@ -123,74 +123,83 @@ func (e *Engine) PutObject(ctx context.Context, bucket, key string, reader io.Re
 		return ObjectInfo{}, errors.New("engine: bucket and key are required")
 	}
 
-	data, err := io.ReadAll(reader)
+	blob, err := e.PutBlob(ctx, key, reader)
 	if err != nil {
-		return ObjectInfo{}, fmt.Errorf("engine: read input: %w", err)
+		return ObjectInfo{}, err
+	}
+	return e.LinkObject(ctx, bucket, key, blob, contentType, time.Now().UTC())
+}
+
+// LinkObject persists an object layout pointing at an existing content blob.
+func (e *Engine) LinkObject(
+	ctx context.Context,
+	bucket string,
+	key string,
+	blob BlobInfo,
+	contentType string,
+	updatedAt time.Time,
+) (ObjectInfo, error) {
+	_ = ctx
+	bucket = strings.TrimSpace(bucket)
+	key = strings.TrimSpace(key)
+	if bucket == "" || key == "" {
+		return ObjectInfo{}, errors.New("engine: bucket and key are required")
+	}
+	blob.Hash = strings.TrimSpace(blob.Hash)
+	blob.ShardDir = strings.TrimSpace(blob.ShardDir)
+	if blob.Hash == "" || blob.ShardDir == "" {
+		return ObjectInfo{}, errors.New("engine: blob hash and shard dir are required")
+	}
+	if blob.ETag == "" {
+		blob.ETag = ETagFromHash(blob.Hash)
+	}
+	if updatedAt.IsZero() {
+		updatedAt = time.Now().UTC()
 	}
 
-	hash := fmt.Sprintf("%x", sha256.Sum256(data))
-	etag := `"` + hash + `"`
-
-	// Encode object into shards
-	shards, err := e.coder.Encode(data)
-	if err != nil {
-		return ObjectInfo{}, fmt.Errorf("engine: encode object: %w", err)
-	}
-
-	shardDir := makeShardDir(key)
-	// Write all shards to disk
-	for i, shard := range shards {
-		if writeErr := e.backend.WriteShard(shardDir, hash, i, shard); writeErr != nil {
-			return ObjectInfo{}, fmt.Errorf("engine: write shard %d: %w", i, writeErr)
-		}
+	layoutID := layoutHash(layoutKey(bucket, key))
+	layout := &Layout{
+		ID:          layoutID,
+		ShardDir:    blob.ShardDir,
+		Hash:        blob.Hash,
+		Bucket:      bucket,
+		Key:         key,
+		Size:        blob.Size,
+		ETag:        blob.ETag,
+		ShardSize:   e.shardSize,
+		CoderType:   fmt.Sprintf("%d+%d", e.dataChunks, e.parityChunks),
+		ContentType: contentType,
+		UpdatedAt:   updatedAt,
+		Version:     1,
 	}
 
 	// Write metadata
-	metaBytes, err := json.Marshal(&Layout{
-		ShardDir:  shardDir,
-		Hash:      hash,
-		Bucket:    bucket,
-		Key:       key,
-		Size:      int64(len(data)),
-		ETag:      etag,
-		ShardSize: e.shardSize,
-		CoderType: fmt.Sprintf("%d+%d", e.dataChunks, e.parityChunks),
-		Version:   1,
-	})
+	metaBytes, err := json.Marshal(layout)
 	if err != nil {
 		return ObjectInfo{}, fmt.Errorf("engine: marshal layout: %w", err)
 	}
-	if err := e.backend.WriteMeta(shardDir, hash, metaBytes); err != nil {
+	if err := e.backend.WriteMeta(blob.ShardDir, layoutID, metaBytes); err != nil {
 		return ObjectInfo{}, fmt.Errorf("engine: write meta: %w", err)
 	}
 
 	// Update cache
-	e.layoutCache.Store(layoutKey(bucket, key), &Layout{
-		ShardDir:  shardDir,
-		Hash:      hash,
-		Bucket:    bucket,
-		Key:       key,
-		Size:      int64(len(data)),
-		ETag:      etag,
-		ShardSize: e.shardSize,
-		CoderType: fmt.Sprintf("%d+%d", e.dataChunks, e.parityChunks),
-		Version:   1,
-	})
+	e.layoutCache.Store(layoutKey(bucket, key), layout)
 
 	return ObjectInfo{
 		ObjectMeta: ObjectMeta{
 			Bucket:      bucket,
 			Key:         key,
-			Hash:        hash,
-			ETag:        etag,
-			Size:        int64(len(data)),
+			Hash:        blob.Hash,
+			ETag:        blob.ETag,
+			Size:        blob.Size,
 			ContentType: contentType,
-			UpdatedAt:   time.Now().UTC(),
+			UpdatedAt:   updatedAt,
 		},
 		DataChunks:   e.dataChunks,
 		ParityChunks: e.parityChunks,
 		TotalChunks:  e.dataChunks + e.parityChunks,
 		ShardSize:    e.shardSize,
+		ShardDir:     blob.ShardDir,
 	}, nil
 }
 
@@ -211,7 +220,7 @@ func (e *Engine) GetObject(ctx context.Context, bucket, key string) (io.ReadClos
 	}
 
 	// Decode data
-	decoded, err := e.coder.Decode(shards)
+	decoded, err := e.coder.Decode(shards, layout.Size)
 	if err != nil {
 		return nil, ObjectInfo{}, fmt.Errorf("engine: decode: %w", err)
 	}
@@ -226,13 +235,28 @@ func (e *Engine) DeleteObject(ctx context.Context, bucket, key string) error {
 		return err
 	}
 
+	if err := e.DeleteObjectLayout(ctx, bucket, key); err != nil {
+		return err
+	}
+	return e.DeleteBlob(ctx, layout.ShardDir, layout.Hash)
+}
+
+// DeleteObjectLayout removes only the object-to-blob layout.
+func (e *Engine) DeleteObjectLayout(ctx context.Context, bucket, key string) error {
+	_ = ctx
+	layout, err := e.getLayout(bucket, key)
+	if err != nil {
+		return err
+	}
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.layoutCache.Delete(layoutKey(bucket, key))
-	if err := e.backend.DeleteShardSet(layout.ShardDir, layout.Hash); err != nil {
-		return fmt.Errorf("engine: delete object shards: %w", err)
+	layoutID := layout.ID
+	if layoutID == "" {
+		layoutID = layoutHash(layoutKey(bucket, key))
 	}
-	return nil
+	return e.backend.DeleteMeta(layout.ShardDir, layoutID)
 }
 
 // CheckHealth checks the health of a shard set.

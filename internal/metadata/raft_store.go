@@ -70,6 +70,18 @@ func (r *RaftMetadata) ListObjectMetas(ctx context.Context, bucket, prefix strin
 	return result.Objects, nil
 }
 
+func (r *RaftMetadata) ListStagedObjectMetas(ctx context.Context, bucket, prefix string) ([]model.ObjectMeta, error) {
+	result, err := r.runtime.ReadMetadata(ctx, raftx.MetadataQuery{
+		Type:   raftx.MetadataQueryListStagedObjectMetas,
+		Bucket: bucket,
+		Prefix: prefix,
+	})
+	if err != nil {
+		return nil, mapRaftError(err)
+	}
+	return result.Objects, nil
+}
+
 func (r *RaftMetadata) GetObjectMeta(ctx context.Context, bucket, key string) (model.ObjectMeta, bool, error) {
 	result, err := r.runtime.ReadMetadata(ctx, raftx.MetadataQuery{
 		Type:   raftx.MetadataQueryGetObjectMeta,
@@ -82,12 +94,34 @@ func (r *RaftMetadata) GetObjectMeta(ctx context.Context, bucket, key string) (m
 	return result.Object, result.ObjectExists, nil
 }
 
+func (r *RaftMetadata) StageObjectMeta(ctx context.Context, meta model.ObjectMeta) error {
+	meta.State = model.ObjectStatePending
+	_, err := r.runtime.ProposeMetadata(ctx, raftx.MetadataCommand{
+		Type: raftx.MetadataCommandStageObjectMeta,
+		Meta: meta,
+	})
+	return mapRaftError(err)
+}
+
 func (r *RaftMetadata) UpsertObjectMeta(ctx context.Context, meta model.ObjectMeta) error {
+	meta.State = model.ObjectStateCommitted
 	_, err := r.runtime.ProposeMetadata(ctx, raftx.MetadataCommand{
 		Type: raftx.MetadataCommandUpsertObjectMeta,
 		Meta: meta,
 	})
 	return mapRaftError(err)
+}
+
+func (r *RaftMetadata) DeleteStagedObjectMeta(ctx context.Context, bucket, key string) (model.ObjectMeta, bool, error) {
+	result, err := r.runtime.ProposeMetadata(ctx, raftx.MetadataCommand{
+		Type:   raftx.MetadataCommandDeleteStagedObjectMeta,
+		Bucket: bucket,
+		Key:    key,
+	})
+	if err != nil {
+		return model.ObjectMeta{}, false, mapRaftError(err)
+	}
+	return result.Object, result.ObjectExists, nil
 }
 
 func (r *RaftMetadata) DeleteObjectMeta(ctx context.Context, bucket, key string) (model.ObjectMeta, bool, error) {

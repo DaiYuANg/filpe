@@ -33,8 +33,11 @@ type MetadataStore interface {
 	DeleteBucket(ctx context.Context, bucket string) error
 
 	ListObjectMetas(ctx context.Context, bucket, prefix string) ([]model.ObjectMeta, error)
+	ListStagedObjectMetas(ctx context.Context, bucket, prefix string) ([]model.ObjectMeta, error)
 	GetObjectMeta(ctx context.Context, bucket, key string) (model.ObjectMeta, bool, error)
+	StageObjectMeta(ctx context.Context, meta model.ObjectMeta) error
 	UpsertObjectMeta(ctx context.Context, meta model.ObjectMeta) error
+	DeleteStagedObjectMeta(ctx context.Context, bucket, key string) (model.ObjectMeta, bool, error)
 	DeleteObjectMeta(ctx context.Context, bucket, key string) (model.ObjectMeta, bool, error)
 
 	GetBlobRef(ctx context.Context, hash string) (BlobRef, bool, error)
@@ -47,6 +50,7 @@ type InMemoryMetadata struct {
 	mu      sync.RWMutex
 	buckets map[string]map[string]struct{}
 	objects map[string]model.ObjectMeta
+	staged  map[string]model.ObjectMeta
 	blobs   map[string]BlobRef
 }
 
@@ -54,6 +58,7 @@ func NewInMemoryMetadata() *InMemoryMetadata {
 	return &InMemoryMetadata{
 		buckets: make(map[string]map[string]struct{}),
 		objects: make(map[string]model.ObjectMeta),
+		staged:  make(map[string]model.ObjectMeta),
 		blobs:   make(map[string]BlobRef),
 	}
 }
@@ -131,6 +136,12 @@ func (m *InMemoryMetadata) DeleteBucket(_ context.Context, bucket string) error 
 		}
 	}
 	delete(m.buckets, bucket)
+	for key := range m.staged {
+		meta := m.staged[key]
+		if meta.Bucket == bucket {
+			delete(m.staged, key)
+		}
+	}
 	return nil
 }
 
@@ -188,6 +199,7 @@ func (m *InMemoryMetadata) UpsertObjectMeta(_ context.Context, meta model.Object
 	if meta.Bucket == "" || meta.Key == "" {
 		return ErrBadRequest
 	}
+	meta.State = model.ObjectStateCommitted
 
 	m.mu.Lock()
 	defer m.mu.Unlock()

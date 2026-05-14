@@ -16,19 +16,22 @@ const (
 	MetadataErrorBucketNotFound = "bucket_not_found"
 	MetadataErrorObjectNotFound = "object_not_found"
 
-	MetadataCommandCreateBucket     = "create_bucket"
-	MetadataCommandDeleteBucket     = "delete_bucket"
-	MetadataCommandUpsertObjectMeta = "upsert_object_meta"
-	MetadataCommandDeleteObjectMeta = "delete_object_meta"
-	MetadataCommandCreateBlobRef    = "create_blob_ref"
-	MetadataCommandIncreaseBlobRef  = "increase_blob_ref"
-	MetadataCommandDecreaseBlobRef  = "decrease_blob_ref"
+	MetadataCommandCreateBucket           = "create_bucket"
+	MetadataCommandDeleteBucket           = "delete_bucket"
+	MetadataCommandStageObjectMeta        = "stage_object_meta"
+	MetadataCommandUpsertObjectMeta       = "upsert_object_meta"
+	MetadataCommandDeleteStagedObjectMeta = "delete_staged_object_meta"
+	MetadataCommandDeleteObjectMeta       = "delete_object_meta"
+	MetadataCommandCreateBlobRef          = "create_blob_ref"
+	MetadataCommandIncreaseBlobRef        = "increase_blob_ref"
+	MetadataCommandDecreaseBlobRef        = "decrease_blob_ref"
 
-	MetadataQueryListBuckets     = "list_buckets"
-	MetadataQueryBucketExists    = "bucket_exists"
-	MetadataQueryListObjectMetas = "list_object_metas"
-	MetadataQueryGetObjectMeta   = "get_object_meta"
-	MetadataQueryGetBlobRef      = "get_blob_ref"
+	MetadataQueryListBuckets           = "list_buckets"
+	MetadataQueryBucketExists          = "bucket_exists"
+	MetadataQueryListObjectMetas       = "list_object_metas"
+	MetadataQueryListStagedObjectMetas = "list_staged_object_metas"
+	MetadataQueryGetObjectMeta         = "get_object_meta"
+	MetadataQueryGetBlobRef            = "get_blob_ref"
 )
 
 type MetadataBlobRef struct {
@@ -74,29 +77,32 @@ type metadataEnvelope struct {
 }
 
 type metadataSnapshot struct {
-	Buckets  map[string]model.Bucket     `json:"buckets"`
-	Objects  map[string]model.ObjectMeta `json:"objects"`
-	BlobRefs map[string]MetadataBlobRef  `json:"blob_refs"`
+	Buckets       map[string]model.Bucket     `json:"buckets"`
+	Objects       map[string]model.ObjectMeta `json:"objects"`
+	StagedObjects map[string]model.ObjectMeta `json:"staged_objects"`
+	BlobRefs      map[string]MetadataBlobRef  `json:"blob_refs"`
 }
 
 type raftStateMachine struct {
 	shardID   uint64
 	replicaID uint64
 
-	mu       sync.RWMutex
-	closed   bool
-	buckets  map[string]model.Bucket
-	objects  map[string]model.ObjectMeta
-	blobRefs map[string]MetadataBlobRef
+	mu            sync.RWMutex
+	closed        bool
+	buckets       map[string]model.Bucket
+	objects       map[string]model.ObjectMeta
+	stagedObjects map[string]model.ObjectMeta
+	blobRefs      map[string]MetadataBlobRef
 }
 
 func newRaftStateMachine(shardID, replicaID uint64) *raftStateMachine {
 	return &raftStateMachine{
-		shardID:   shardID,
-		replicaID: replicaID,
-		buckets:   make(map[string]model.Bucket),
-		objects:   make(map[string]model.ObjectMeta),
-		blobRefs:  make(map[string]MetadataBlobRef),
+		shardID:       shardID,
+		replicaID:     replicaID,
+		buckets:       make(map[string]model.Bucket),
+		objects:       make(map[string]model.ObjectMeta),
+		stagedObjects: make(map[string]model.ObjectMeta),
+		blobRefs:      make(map[string]MetadataBlobRef),
 	}
 }
 
@@ -152,9 +158,10 @@ func (s *raftStateMachine) SaveSnapshot(w io.Writer, _ dbsm.ISnapshotFileCollect
 	defer s.mu.RUnlock()
 
 	if err := json.NewEncoder(w).Encode(metadataSnapshot{
-		Buckets:  copyBucketMap(s.buckets),
-		Objects:  copyObjectMap(s.objects),
-		BlobRefs: copyBlobRefMap(s.blobRefs),
+		Buckets:       copyBucketMap(s.buckets),
+		Objects:       copyObjectMap(s.objects),
+		StagedObjects: copyObjectMap(s.stagedObjects),
+		BlobRefs:      copyBlobRefMap(s.blobRefs),
 	}); err != nil {
 		return fmt.Errorf("encode metadata snapshot: %w", err)
 	}
@@ -177,6 +184,10 @@ func (s *raftStateMachine) RecoverFromSnapshot(r io.Reader, _ []dbsm.SnapshotFil
 	s.objects = snapshot.Objects
 	if s.objects == nil {
 		s.objects = make(map[string]model.ObjectMeta)
+	}
+	s.stagedObjects = snapshot.StagedObjects
+	if s.stagedObjects == nil {
+		s.stagedObjects = make(map[string]model.ObjectMeta)
 	}
 	s.blobRefs = snapshot.BlobRefs
 	if s.blobRefs == nil {

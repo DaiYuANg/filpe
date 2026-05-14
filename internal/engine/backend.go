@@ -138,6 +138,15 @@ func (b *shardBackend) DeleteShardSet(shardDir, hash string) error {
 	return nil
 }
 
+// DeleteMeta removes the persisted object layout metadata.
+func (b *shardBackend) DeleteMeta(shardDir, layoutID string) error {
+	dir := filepath.Join(b.root, shardDir, layoutID)
+	if err := b.fs.RemoveAll(dir); err != nil {
+		return fmt.Errorf("engine: delete layout meta: %w", err)
+	}
+	return nil
+}
+
 // ListShards returns the shard indexes that exist for a shard set.
 func (b *shardBackend) ListShards(shardDir, hash string) ([]int, error) {
 	dir := filepath.Join(b.root, shardDir, hash)

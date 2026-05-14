@@ -68,6 +68,9 @@ func (c *Coder) Encode(data []byte) ([][]byte, error) {
 	}
 	for i := range c.k {
 		start := i * shardSize
+		if start >= len(data) {
+			continue
+		}
 		end := min(start+shardSize, len(data))
 		copy(padded[i], data[start:end])
 	}
@@ -85,20 +88,40 @@ func (c *Coder) Encode(data []byte) ([][]byte, error) {
 }
 
 // Decode reconstructs the original data from shards. At most m shards may be missing.
-func (c *Coder) Decode(shards [][]byte) ([]byte, error) {
+func (c *Coder) Decode(shards [][]byte, originalSize int64) ([]byte, error) {
+	if originalSize < 0 {
+		return nil, errors.New("erasure: original size must be >= 0")
+	}
+	if originalSize == 0 {
+		return []byte{}, nil
+	}
+	shardSize := availableShardSize(shards)
+	if shardSize == 0 {
+		return nil, errors.New("erasure: no shards available")
+	}
 	for i := range shards {
 		if shards[i] == nil {
-			shardSize := len(shards[0])
 			shards[i] = make([]byte, shardSize)
 		}
 	}
 	if err := c.scheme.Reconstruct(shards); err != nil {
 		return nil, fmt.Errorf("erasure: decode data: %w", err)
 	}
-	// Reassemble: concatenate k data shards, strip padding
+	// Reassemble k data shards and truncate to the exact object size.
 	reconstructed := bytes.Join(shards[:c.k], nil)
-	reconstructed = bytes.TrimRight(reconstructed, "\x00")
-	return reconstructed, nil
+	if originalSize > int64(len(reconstructed)) {
+		return nil, errors.New("erasure: original size exceeds reconstructed payload")
+	}
+	return reconstructed[:int(originalSize)], nil
+}
+
+func availableShardSize(shards [][]byte) int {
+	for _, shard := range shards {
+		if len(shard) > 0 {
+			return len(shard)
+		}
+	}
+	return 0
 }
 
 // Rebuild regenerates missing parity shards from remaining shards.

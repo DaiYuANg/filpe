@@ -5,20 +5,24 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Layout maps object keys to their shard locations.
 type Layout struct {
-	ShardDir  string
-	Hash      string
-	Shards    []Shard
-	Bucket    string
-	Key       string
-	Size      int64
-	ETag      string
-	ShardSize int64
-	CoderType string
-	Version   int64
+	ID          string
+	ShardDir    string
+	Hash        string
+	Shards      []Shard
+	Bucket      string
+	Key         string
+	Size        int64
+	ETag        string
+	ShardSize   int64
+	CoderType   string
+	ContentType string
+	UpdatedAt   time.Time
+	Version     int64
 }
 
 func (l Layout) String() string {

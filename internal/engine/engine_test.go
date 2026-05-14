@@ -71,6 +71,77 @@ func TestPutAndGetObject(t *testing.T) {
 	}
 }
 
+func TestGetObjectAfterEngineRestart(t *testing.T) {
+	ctx := context.Background()
+	fs := afero.NewMemMapFs()
+	first, err := engine.NewEngine("/test", engine.DefaultDataChunks, engine.DefaultParityChunks, fs)
+	if err != nil {
+		t.Fatalf("create first engine: %v", err)
+	}
+	content := []byte("restart should not lose layout lookup")
+	meta, err := first.PutObject(ctx, "test-bucket", "restart-key.txt", bytes.NewReader(content), "text/plain")
+	if err != nil {
+		t.Fatalf("PutObject: %v", err)
+	}
+
+	restarted, err := engine.NewEngine("/test", engine.DefaultDataChunks, engine.DefaultParityChunks, fs)
+	if err != nil {
+		t.Fatalf("create restarted engine: %v", err)
+	}
+	reader, objInfo, err := restarted.GetObject(ctx, "test-bucket", "restart-key.txt")
+	if err != nil {
+		t.Fatalf("GetObject after restart: %v", err)
+	}
+	defer func() {
+		if closeErr := reader.Close(); closeErr != nil {
+			t.Fatalf("close reader: %v", closeErr)
+		}
+	}()
+
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read object data: %v", err)
+	}
+	if !bytes.Equal(data, content) {
+		t.Errorf("data = %q, want %q", data, content)
+	}
+	if objInfo.Hash != meta.Hash {
+		t.Errorf("Hash = %s, want %s", objInfo.Hash, meta.Hash)
+	}
+	if objInfo.ContentType != meta.ContentType {
+		t.Errorf("ContentType = %s, want %s", objInfo.ContentType, meta.ContentType)
+	}
+}
+
+func TestGetObjectPreservesTrailingZeroBytes(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEngine(t)
+
+	content := []byte{'b', 'i', 'n', 0, 0}
+	_, err := e.PutObject(ctx, "test-bucket", "binary-key.bin", bytes.NewReader(content), "application/octet-stream")
+	if err != nil {
+		t.Fatalf("PutObject: %v", err)
+	}
+
+	reader, _, err := e.GetObject(ctx, "test-bucket", "binary-key.bin")
+	if err != nil {
+		t.Fatalf("GetObject: %v", err)
+	}
+	defer func() {
+		if closeErr := reader.Close(); closeErr != nil {
+			t.Fatalf("close reader: %v", closeErr)
+		}
+	}()
+
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read object data: %v", err)
+	}
+	if !bytes.Equal(data, content) {
+		t.Errorf("data = %v, want %v", data, content)
+	}
+}
+
 func TestDeleteObject(t *testing.T) {
 	ctx := context.Background()
 	e := newTestEngine(t)

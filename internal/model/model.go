@@ -3,6 +3,11 @@ package model
 
 import "time"
 
+const (
+	ObjectStatePending   = "pending"
+	ObjectStateCommitted = "committed"
+)
+
 type Bucket struct {
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
@@ -16,6 +21,7 @@ type ObjectMeta struct {
 	Size        int64     `json:"size"`
 	ContentType string    `json:"content_type"`
 	UpdatedAt   time.Time `json:"updated_at"`
+	State       string    `json:"state,omitempty"`
 }
 
 type SearchQuery struct {

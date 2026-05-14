@@ -137,7 +137,8 @@ func (s *SearchEngine) searchFromMemory(query model.SearchQuery) model.SearchRes
 	defer s.mu.RUnlock()
 
 	items := list.NewListWithCapacity[model.ObjectMeta](len(s.items))
-	for _, meta := range s.items {
+	for key := range s.items {
+		meta := s.items[key]
 		items.Add(meta)
 	}
 

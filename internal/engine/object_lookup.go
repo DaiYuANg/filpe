@@ -75,22 +75,95 @@ func (e *Engine) getLayout(bucket, key string) (*Layout, error) {
 
 	// Compute shard dir and hash
 	shardDir := makeShardDir(key)
-	hash := layoutHash(lk)
+	layoutID := layoutHash(lk)
 
 	// Try to read from disk
-	metaBytes, err := e.backend.ReadMeta(shardDir, hash)
+	metaBytes, err := e.backend.ReadMeta(shardDir, layoutID)
 	if err != nil {
-		return nil, ErrObjectNotFound
+		layout, scanErr := e.scanObjectLayout(bucket, key)
+		if scanErr != nil {
+			return nil, ErrObjectNotFound
+		}
+		e.layoutCache.Store(lk, layout)
+		return layout, nil
 	}
 
 	var layout Layout
 	if err := json.Unmarshal(metaBytes, &layout); err != nil {
 		return nil, fmt.Errorf("engine: unmarshal layout: %w", err)
 	}
+	if layout.ID == "" {
+		layout.ID = layoutID
+	}
+	if layout.ShardDir == "" {
+		layout.ShardDir = shardDir
+	}
 
 	// Cache it
 	e.layoutCache.Store(lk, &layout)
 	return &layout, nil
+}
+
+func (e *Engine) scanObjectLayout(bucket, key string) (*Layout, error) {
+	scanner := objectLayoutScanner{
+		engine: e,
+		bucket: bucket,
+		key:    key,
+	}
+	if err := afero.Walk(e.fs, e.root, scanner.visit); err != nil {
+		return nil, fmt.Errorf("engine: scan object layout: %w", err)
+	}
+	if scanner.found == nil {
+		return nil, ErrObjectNotFound
+	}
+	return scanner.found, nil
+}
+
+type objectLayoutScanner struct {
+	engine *Engine
+	bucket string
+	key    string
+	found  *Layout
+}
+
+func (s *objectLayoutScanner) visit(path string, info os.FileInfo, walkErr error) error {
+	if walkErr != nil {
+		return walkErr
+	}
+	if !s.shouldRead(info) {
+		return nil
+	}
+	layout, err := s.read(path)
+	if err != nil {
+		return err
+	}
+	if layout.Bucket == s.bucket && layout.Key == s.key {
+		s.normalize(layout)
+		s.found = layout
+	}
+	return nil
+}
+
+func (s *objectLayoutScanner) shouldRead(info os.FileInfo) bool {
+	return s.found == nil && !info.IsDir() && info.Name() == "meta.json"
+}
+
+func (s *objectLayoutScanner) read(path string) (*Layout, error) {
+	data, err := afero.ReadFile(s.engine.fs, path)
+	if err != nil {
+		return nil, fmt.Errorf("engine: read layout %s: %w", path, err)
+	}
+	var layout Layout
+	if err := json.Unmarshal(data, &layout); err != nil {
+		return nil, fmt.Errorf("engine: unmarshal layout %s: %w", path, err)
+	}
+	return &layout, nil
+}
+
+func (s *objectLayoutScanner) normalize(layout *Layout) {
+	if layout.ID == "" {
+		layout.ID = layoutHash(layoutKey(s.bucket, s.key))
+	}
 }
 
 func (e *Engine) canRebuild(layout *Layout) bool {
@@ -192,6 +265,10 @@ func (e *Engine) fillMissingShards(layout *Layout, shards [][]byte) (int, error)
 }
 
 func (e *Engine) objectInfoFromLayout(layout *Layout) ObjectInfo {
+	updatedAt := layout.UpdatedAt
+	if updatedAt.IsZero() {
+		updatedAt = time.Now().UTC()
+	}
 	return ObjectInfo{
 		ObjectMeta: ObjectMeta{
 			Bucket:      layout.Bucket,
@@ -199,12 +276,13 @@ func (e *Engine) objectInfoFromLayout(layout *Layout) ObjectInfo {
 			Hash:        layout.Hash,
 			ETag:        layout.ETag,
 			Size:        layout.Size,
-			ContentType: "",
-			UpdatedAt:   time.Now().UTC(),
+			ContentType: layout.ContentType,
+			UpdatedAt:   updatedAt,
 		},
 		DataChunks:   e.dataChunks,
 		ParityChunks: e.parityChunks,
 		TotalChunks:  e.dataChunks + e.parityChunks,
 		ShardSize:    e.shardSize,
+		ShardDir:     layout.ShardDir,
 	}
 }

@@ -31,8 +31,21 @@ func Module() dix.Module {
 				)
 				return store, nil
 			}),
+			dix.Provider3(func(cfg config.Config, store *Store, logger *slog.Logger) *pendingCleanup {
+				return &pendingCleanup{
+					cfg:    cfg,
+					store:  store,
+					logger: logger,
+				}
+			}),
 		),
 		dix.Hooks(
+			dix.OnStart(func(ctx context.Context, cleanup *pendingCleanup) error {
+				if cleanup == nil {
+					return nil
+				}
+				return cleanup.run(ctx)
+			}),
 			dix.OnStop(func(_ context.Context, store *Store) error {
 				if store == nil {
 					return nil

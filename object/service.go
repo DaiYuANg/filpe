@@ -105,14 +105,9 @@ func (s *Service) GetObject(ctx context.Context, bucket, key string) (io.ReadClo
 }
 
 func (s *Service) StatObject(ctx context.Context, bucket, key string) (ObjectMeta, error) {
-	body, meta, err := s.store.GetObject(ctx, bucket, key)
+	meta, err := s.store.StatObject(ctx, bucket, key)
 	if err != nil {
 		return ObjectMeta{}, fmt.Errorf("stat object: %w", err)
-	}
-	if body != nil {
-		if closeErr := body.Close(); closeErr != nil {
-			s.logger.WarnContext(ctx, "close object body failed", "error", closeErr)
-		}
 	}
 	return meta, nil
 }
