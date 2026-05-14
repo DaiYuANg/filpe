@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -23,7 +24,7 @@ type runtimeConfig struct {
 	nodeHostDir    string
 	bootstrap      bool
 	join           bool
-	initialMembers map[uint64]string
+	initialMembers map[uint64]dragonboat.Target
 	rttMs          uint64
 	electionRTT    uint64
 	heartbeatRTT   uint64
@@ -40,98 +41,134 @@ func Module() dix.Module {
 	return dix.NewModule(
 		"raft",
 		dix.WithModuleProviders(
-			dix.ProviderErr2(func(cfg config.Config, logger *slog.Logger) (*Runtime, error) {
-				nodeHostDir := cfg.RaftDataDir
-				if nodeHostDir == "" {
-					nodeHostDir = filepath.Join(cfg.DataDir, "raft")
-				}
-				configureDragonboatLogger(logger)
-				initialMembers, err := parseInitialMembers(cfg.RaftInitialMembers)
-				if err != nil {
-					return nil, err
-				}
-
-				rtCfg := &runtimeConfig{
-					raftAddress:    cfg.RaftAddress,
-					shardID:        cfg.RaftShardID,
-					replicaID:      cfg.RaftNodeID,
-					nodeHostDir:    nodeHostDir,
-					bootstrap:      cfg.RaftBootstrap,
-					join:           cfg.RaftJoin,
-					initialMembers: initialMembers,
-					rttMs:          200,
-					electionRTT:    20,
-					heartbeatRTT:   2,
-				}
-				if rtCfg.shardID == 0 {
-					rtCfg.shardID = 1
-				}
-				if rtCfg.replicaID == 0 {
-					rtCfg.replicaID = 1
-				}
-				if err := validateInitialMembers(rtCfg); err != nil {
-					return nil, err
-				}
-
-				nhc := dcfg.NodeHostConfig{
-					NodeHostDir:    rtCfg.nodeHostDir,
-					WALDir:         rtCfg.nodeHostDir,
-					RTTMillisecond: rtCfg.rttMs,
-					RaftAddress:    rtCfg.raftAddress,
-					DeploymentID:   rtCfg.deploymentID,
-				}
-				nodeHost, err := dragonboat.NewNodeHost(nhc)
-				if err != nil {
-					return nil, fmt.Errorf("create dragonboat nodehost: %w", err)
-				}
-				return &Runtime{
-					cfg:    rtCfg,
-					node:   nodeHost,
-					logger: logger,
-				}, nil
-			}),
+			dix.ProviderErr2(newRuntime),
 		),
 		dix.Hooks(
-			dix.OnStart(func(ctx context.Context, rt *Runtime) error {
-				if rt == nil || rt.node == nil {
-					return nil
-				}
-				startupConfig := dcfg.Config{
-					ReplicaID:    rt.cfg.replicaID,
-					ShardID:      rt.cfg.shardID,
-					HeartbeatRTT: rt.cfg.heartbeatRTT,
-					ElectionRTT:  rt.cfg.electionRTT,
-					CheckQuorum:  true,
-				}
-				members := rt.startupMembers()
-				create := func(_, _ uint64) dbsm.IStateMachine {
-					return newRaftStateMachine(rt.cfg.shardID, rt.cfg.replicaID)
-				}
-				if err := rt.node.StartReplica(members, rt.cfg.join, create, startupConfig); err != nil {
-					return fmt.Errorf("start raft replica: %w", err)
-				}
-				if rt.logger != nil {
-					rt.logger.InfoContext(ctx, "dragonboat replica started",
-						"mode", rt.startupMode(),
-						"raft_address", rt.cfg.raftAddress,
-						"shard_id", rt.cfg.shardID,
-						"replica_id", rt.cfg.replicaID,
-						"initial_members", len(members),
-					)
-				}
-				return nil
-			}),
-			dix.OnStop(func(_ context.Context, rt *Runtime) error {
-				if rt == nil || rt.node == nil {
-					return nil
-				}
-				if err := rt.node.StopShard(rt.cfg.shardID); err != nil && rt.logger != nil {
-					rt.logger.Warn("stop raft shard failed", "error", err)
-				}
-				rt.node.Close()
-				return nil
-			}),
+			dix.OnStart(startReplica),
+			dix.OnStop(stopReplica),
 		),
+	)
+}
+
+func newRuntime(cfg config.Config, logger *slog.Logger) (*Runtime, error) {
+	configureDragonboatLogger(logger)
+
+	rtCfg, err := newRuntimeConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	nodeHost, err := newNodeHost(rtCfg)
+	if err != nil {
+		return nil, err
+	}
+	return &Runtime{
+		cfg:    rtCfg,
+		node:   nodeHost,
+		logger: logger,
+	}, nil
+}
+
+func newRuntimeConfig(cfg config.Config) (*runtimeConfig, error) {
+	initialMembers, err := parseInitialMembers(cfg.RaftInitialMembers)
+	if err != nil {
+		return nil, err
+	}
+	rtCfg := &runtimeConfig{
+		raftAddress:    cfg.RaftAddress,
+		shardID:        cfg.RaftShardID,
+		replicaID:      cfg.RaftNodeID,
+		nodeHostDir:    nodeHostDir(cfg),
+		bootstrap:      cfg.RaftBootstrap,
+		join:           cfg.RaftJoin,
+		initialMembers: initialMembers,
+		rttMs:          200,
+		electionRTT:    20,
+		heartbeatRTT:   2,
+	}
+	rtCfg.applyDefaults()
+	if validateErr := validateInitialMembers(rtCfg); validateErr != nil {
+		return nil, validateErr
+	}
+	return rtCfg, nil
+}
+
+func nodeHostDir(cfg config.Config) string {
+	if cfg.RaftDataDir != "" {
+		return cfg.RaftDataDir
+	}
+	return filepath.Join(cfg.DataDir, "raft")
+}
+
+func (cfg *runtimeConfig) applyDefaults() {
+	if cfg.shardID == 0 {
+		cfg.shardID = 1
+	}
+	if cfg.replicaID == 0 {
+		cfg.replicaID = 1
+	}
+}
+
+func newNodeHost(cfg *runtimeConfig) (*dragonboat.NodeHost, error) {
+	nhc := dcfg.NodeHostConfig{
+		NodeHostDir:    cfg.nodeHostDir,
+		WALDir:         cfg.nodeHostDir,
+		RTTMillisecond: cfg.rttMs,
+		RaftAddress:    cfg.raftAddress,
+		DeploymentID:   cfg.deploymentID,
+	}
+	nodeHost, err := dragonboat.NewNodeHost(nhc)
+	if err != nil {
+		return nil, fmt.Errorf("create dragonboat nodehost: %w", err)
+	}
+	return nodeHost, nil
+}
+
+func startReplica(ctx context.Context, rt *Runtime) error {
+	if rt == nil || rt.node == nil {
+		return nil
+	}
+	create := func(_, _ uint64) dbsm.IStateMachine {
+		return newRaftStateMachine(rt.cfg.shardID, rt.cfg.replicaID)
+	}
+	if err := rt.node.StartReplica(rt.startupMembers(), rt.cfg.join, create, rt.replicaConfig()); err != nil {
+		return fmt.Errorf("start raft replica: %w", err)
+	}
+	rt.logStarted(ctx)
+	return nil
+}
+
+func stopReplica(_ context.Context, rt *Runtime) error {
+	if rt == nil || rt.node == nil {
+		return nil
+	}
+	if err := rt.node.StopShard(rt.cfg.shardID); err != nil && rt.logger != nil {
+		rt.logger.Warn("stop raft shard failed", "error", err)
+	}
+	rt.node.Close()
+	return nil
+}
+
+func (rt *Runtime) replicaConfig() dcfg.Config {
+	return dcfg.Config{
+		ReplicaID:    rt.cfg.replicaID,
+		ShardID:      rt.cfg.shardID,
+		HeartbeatRTT: rt.cfg.heartbeatRTT,
+		ElectionRTT:  rt.cfg.electionRTT,
+		CheckQuorum:  true,
+	}
+}
+
+func (rt *Runtime) logStarted(ctx context.Context) {
+	if rt.logger == nil {
+		return
+	}
+	members := rt.startupMembers()
+	rt.logger.InfoContext(ctx, "dragonboat replica started",
+		"mode", rt.startupMode(),
+		"raft_address", rt.cfg.raftAddress,
+		"shard_id", rt.cfg.shardID,
+		"replica_id", rt.cfg.replicaID,
+		"initial_members", len(members),
 	)
 }
 
@@ -151,11 +188,7 @@ func (rt *Runtime) startupMembers() map[uint64]dragonboat.Target {
 			rt.cfg.replicaID: rt.cfg.raftAddress,
 		}
 	}
-	members := make(map[uint64]dragonboat.Target, len(rt.cfg.initialMembers))
-	for replicaID, target := range rt.cfg.initialMembers {
-		members[replicaID] = target
-	}
-	return members
+	return maps.Clone(rt.cfg.initialMembers)
 }
 
 func (rt *Runtime) startupMode() string {
@@ -171,13 +204,13 @@ func (rt *Runtime) startupMode() string {
 	return "restart"
 }
 
-func parseInitialMembers(value string) (map[uint64]string, error) {
+func parseInitialMembers(value string) (map[uint64]dragonboat.Target, error) {
 	value = strings.TrimSpace(value)
+	members := make(map[uint64]dragonboat.Target)
 	if value == "" {
-		return nil, nil
+		return members, nil
 	}
-	members := make(map[uint64]string)
-	for _, part := range strings.Split(value, ",") {
+	for part := range strings.SplitSeq(value, ",") {
 		item := strings.TrimSpace(part)
 		if item == "" {
 			continue
@@ -194,7 +227,7 @@ func parseInitialMembers(value string) (map[uint64]string, error) {
 	return members, nil
 }
 
-func parseInitialMember(value string) (uint64, string, error) {
+func parseInitialMember(value string) (uint64, dragonboat.Target, error) {
 	separator := strings.Index(value, "=")
 	if separator < 0 {
 		separator = strings.Index(value, "@")

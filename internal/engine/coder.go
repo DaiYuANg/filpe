@@ -1,7 +1,8 @@
-﻿package engine
+package engine
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/klauspost/reedsolomon"
@@ -25,13 +26,13 @@ type CoderConfig struct {
 
 func (cfg CoderConfig) validate() error {
 	if cfg.DataChunks < 1 {
-		return fmt.Errorf("erasure: data chunks must be >= 1")
+		return errors.New("erasure: data chunks must be >= 1")
 	}
 	if cfg.ParityChunks < 1 {
-		return fmt.Errorf("erasure: parity chunks must be >= 1")
+		return errors.New("erasure: parity chunks must be >= 1")
 	}
 	if cfg.ShardPool == nil {
-		return fmt.Errorf("erasure: shard pool must be non-nil")
+		return errors.New("erasure: shard pool must be non-nil")
 	}
 	return nil
 }
@@ -52,29 +53,26 @@ func newCoder(cfg CoderConfig) (*Coder, error) {
 	}, nil
 }
 
-func (c *Coder) DataChunks() int      { return c.k }
-func (c *Coder) ParityChunks() int    { return c.m }
-func (c *Coder) TotalChunks() int     { return c.k + c.m }
-func (c *Coder) Pool() *shardBackend  { return c.pool }
+func (c *Coder) DataChunks() int     { return c.k }
+func (c *Coder) ParityChunks() int   { return c.m }
+func (c *Coder) TotalChunks() int    { return c.k + c.m }
+func (c *Coder) Pool() *shardBackend { return c.pool }
 
 // Encode encodes a single object, splitting it into k data shards and m parity shards.
 func (c *Coder) Encode(data []byte) ([][]byte, error) {
 	numChunks := c.TotalChunks()
 	shardSize := (len(data) + c.k - 1) / c.k
 	padded := make([][]byte, numChunks)
-	for i := 0; i < numChunks; i++ {
+	for i := range numChunks {
 		padded[i] = make([]byte, shardSize)
 	}
-	for i := 0; i < c.k; i++ {
+	for i := range c.k {
 		start := i * shardSize
-		end := start + shardSize
-		if end > len(data) {
-			end = len(data)
-		}
+		end := min(start+shardSize, len(data))
 		copy(padded[i], data[start:end])
 	}
 	// Fill remaining data shard slots with zeros
-	for i := 0; i < c.k; i++ {
+	for i := range c.k {
 		start := i * shardSize
 		if start >= len(data) {
 			padded[i] = make([]byte, shardSize)

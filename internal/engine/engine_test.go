@@ -1,18 +1,21 @@
-package engine
+package engine_test
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"testing"
 
+	"github.com/lyonbrown4d/maxio/internal/engine"
 	"github.com/spf13/afero"
 )
 
-func newTestEngine(t *testing.T) *Engine {
+func newTestEngine(t *testing.T) *engine.Engine {
 	t.Helper()
 	fs := afero.NewMemMapFs()
-	e, err := NewEngine("/test", DefaultDataChunks, DefaultParityChunks, fs)
+	e, err := engine.NewEngine("/test", engine.DefaultDataChunks, engine.DefaultParityChunks, fs)
 	if err != nil {
 		t.Fatalf("create test engine: %v", err)
 	}
@@ -21,21 +24,12 @@ func newTestEngine(t *testing.T) *Engine {
 
 func TestNewEngine(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	engine, err := NewEngine("/test", DefaultDataChunks, DefaultParityChunks, fs)
+	storage, err := engine.NewEngine("/test", engine.DefaultDataChunks, engine.DefaultParityChunks, fs)
 	if err != nil {
 		t.Fatalf("create engine: %v", err)
 	}
-	if engine == nil {
+	if storage == nil {
 		t.Fatal("engine is nil")
-	}
-	if engine.dataChunks != DefaultDataChunks {
-		t.Errorf("dataChunks = %d, want %d", engine.dataChunks, DefaultDataChunks)
-	}
-	if engine.parityChunks != DefaultParityChunks {
-		t.Errorf("parityChunks = %d, want %d", engine.parityChunks, DefaultParityChunks)
-	}
-	if engine.coder.TotalChunks() != DefaultDataChunks+DefaultParityChunks {
-		t.Errorf("totalChunks = %d, want %d", engine.coder.TotalChunks(), DefaultDataChunks+DefaultParityChunks)
 	}
 }
 
@@ -59,13 +53,17 @@ func TestPutAndGetObject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetObject: %v", err)
 	}
-	defer reader.Close()
+	defer func() {
+		if closeErr := reader.Close(); closeErr != nil {
+			t.Fatalf("close reader: %v", closeErr)
+		}
+	}()
 
 	data, err := io.ReadAll(reader)
 	if err != nil {
 		t.Fatalf("read object data: %v", err)
 	}
-	if string(data) != string(content) {
+	if !bytes.Equal(data, content) {
 		t.Errorf("data = %s, want %s", data, content)
 	}
 	if objInfo.ETag != meta.ETag {
@@ -89,7 +87,7 @@ func TestDeleteObject(t *testing.T) {
 	}
 
 	_, _, err = e.GetObject(ctx, "test-bucket", "delete-key.txt")
-	if err != ErrObjectNotFound {
+	if !errors.Is(err, engine.ErrObjectNotFound) {
 		t.Errorf("GetObject after delete = %v, want ErrObjectNotFound", err)
 	}
 }
@@ -108,8 +106,8 @@ func TestHealthCheck(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CheckHealth: %v", err)
 	}
-	if health.TotalChunks != DefaultDataChunks+DefaultParityChunks {
-		t.Errorf("TotalChunks = %d, want %d", health.TotalChunks, DefaultDataChunks+DefaultParityChunks)
+	if health.TotalChunks != engine.DefaultDataChunks+engine.DefaultParityChunks {
+		t.Errorf("TotalChunks = %d, want %d", health.TotalChunks, engine.DefaultDataChunks+engine.DefaultParityChunks)
 	}
 	if health.Available != health.TotalChunks {
 		t.Errorf("Available = %d, want %d", health.Available, health.TotalChunks)

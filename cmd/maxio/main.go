@@ -1,3 +1,4 @@
+// Package main starts the MaxIO command-line server.
 package main
 
 import (

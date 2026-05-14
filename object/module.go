@@ -1,26 +1,13 @@
+// Package object exposes MaxIO's public object service API.
 package object
 
-import (
-	"log/slog"
-
-	"github.com/arcgolabs/dix"
-	"github.com/arcgolabs/eventx"
-	"github.com/lyonbrown4d/maxio/internal/index"
-	"github.com/lyonbrown4d/maxio/internal/store"
-)
+import "github.com/arcgolabs/dix"
 
 func Module() dix.Module {
 	return dix.NewModule(
 		"object",
 		dix.WithModuleProviders(
-			dix.Provider4(func(
-				storage *store.Store,
-				search *index.SearchEngine,
-				bus eventx.BusRuntime,
-				logger *slog.Logger,
-			) *Service {
-				return NewService(storage, search, bus, logger)
-			}),
+			dix.Provider4(NewService),
 		),
 	)
 }

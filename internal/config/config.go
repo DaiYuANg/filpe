@@ -1,3 +1,4 @@
+// Package config loads and normalizes MaxIO runtime configuration.
 package config
 
 import (
@@ -14,16 +15,16 @@ import (
 const defaultConfigPath = "./config.json"
 
 type Config struct {
-	HTTPAddress        string `koanf:"http_address" json:"http_address" validate:"required,min=1"`
-	DataDir            string `koanf:"data_dir" json:"data_dir" validate:"required,min=1"`
-	LogLevel           string `koanf:"log_level" json:"log_level" validate:"required,oneof=debug info warn error"`
-	RaftNodeID         uint64 `koanf:"raft_node_id" json:"raft_node_id"`
-	RaftShardID        uint64 `koanf:"raft_shard_id" json:"raft_shard_id"`
-	RaftAddress        string `koanf:"raft_address" json:"raft_address"`
-	RaftDataDir        string `koanf:"raft_data_dir" json:"raft_data_dir"`
-	RaftBootstrap      bool   `koanf:"raft_bootstrap" json:"raft_bootstrap"`
-	RaftJoin           bool   `koanf:"raft_join" json:"raft_join"`
-	RaftInitialMembers string `koanf:"raft_initial_members" json:"raft_initial_members"`
+	HTTPAddress        string `json:"http_address"         koanf:"http_address"         validate:"required,min=1"`
+	DataDir            string `json:"data_dir"             koanf:"data_dir"             validate:"required,min=1"`
+	LogLevel           string `json:"log_level"            koanf:"log_level"            validate:"required,oneof=debug info warn error"`
+	RaftNodeID         uint64 `json:"raft_node_id"         koanf:"raft_node_id"`
+	RaftShardID        uint64 `json:"raft_shard_id"        koanf:"raft_shard_id"`
+	RaftAddress        string `json:"raft_address"         koanf:"raft_address"`
+	RaftDataDir        string `json:"raft_data_dir"        koanf:"raft_data_dir"`
+	RaftBootstrap      bool   `json:"raft_bootstrap"       koanf:"raft_bootstrap"`
+	RaftJoin           bool   `json:"raft_join"            koanf:"raft_join"`
+	RaftInitialMembers string `json:"raft_initial_members" koanf:"raft_initial_members"`
 }
 
 func Default() Config {
@@ -41,8 +42,31 @@ func Default() Config {
 
 func Load(opts ...configx.Option) (Config, error) {
 	cfg := Default()
+	options, err := loadOptions(cfg, opts...)
+	if err != nil {
+		return cfg, err
+	}
 
-	options := []configx.Option{
+	loaded, err := configx.LoadTErr[Config](options...)
+	if err != nil {
+		return cfg, fmt.Errorf("load config failed: %w", err)
+	}
+	return normalize(loaded)
+}
+
+func loadOptions(cfg Config, opts ...configx.Option) ([]configx.Option, error) {
+	options := defaultLoadOptions(cfg)
+	fileOptions, err := configFileOptions(defaultConfigPath)
+	if err != nil {
+		return nil, err
+	}
+	options = append(options, fileOptions...)
+	options = append(options, opts...)
+	return options, nil
+}
+
+func defaultLoadOptions(cfg Config) []configx.Option {
+	return []configx.Option{
 		configx.WithTypedDefaults(cfg),
 		configx.WithDotenv(),
 		configx.WithEnvPrefix("MAXIO"),
@@ -60,19 +84,18 @@ func Load(opts ...configx.Option) (Config, error) {
 			slog.Default().Error("config watch error", "error", err)
 		}),
 	}
-	if _, statErr := os.Stat(defaultConfigPath); statErr == nil {
-		options = append(options, configx.WithFiles(defaultConfigPath))
+}
+
+func configFileOptions(path string) ([]configx.Option, error) {
+	if _, statErr := os.Stat(path); statErr == nil {
+		return []configx.Option{configx.WithFiles(path)}, nil
 	} else if !os.IsNotExist(statErr) {
-		return cfg, fmt.Errorf("check config path: %w", statErr)
+		return nil, fmt.Errorf("check config path: %w", statErr)
 	}
-	options = append(options, opts...)
+	return []configx.Option{}, nil
+}
 
-	loaded, err := configx.LoadTErr[Config](options...)
-	if err != nil {
-		return cfg, fmt.Errorf("load config failed: %w", err)
-	}
-	cfg = loaded
-
+func normalize(cfg Config) (Config, error) {
 	cfg.DataDir = strings.TrimSpace(cfg.DataDir)
 	if cfg.DataDir == "" {
 		return cfg, errors.New("invalid config: data_dir is required")

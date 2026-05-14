@@ -1,8 +1,10 @@
+// Package http wires MaxIO's HTTP server runtime.
 package http
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	stdhttp "net/http"
 
@@ -69,7 +71,7 @@ func Module() dix.Module {
 			dix.OnStop(func(_ context.Context, rt *httpRuntime) error {
 				rt.logger.Info("http server stopping")
 				if err := rt.server.Shutdown(); err != nil {
-					return err
+					return fmt.Errorf("shutdown http server: %w", err)
 				}
 				rt.logger.Info("http server stopped")
 				return nil

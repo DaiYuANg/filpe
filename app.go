@@ -1,7 +1,9 @@
+// Package maxio exposes the embeddable MaxIO application runtime.
 package maxio
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -50,7 +52,11 @@ func DefaultConfig() Config {
 
 // LoadConfig loads typed MaxIO configuration using the same configx pipeline as the runtime.
 func LoadConfig(opts ...configx.Option) (Config, error) {
-	return config.Load(opts...)
+	cfg, err := config.Load(opts...)
+	if err != nil {
+		return Config{}, fmt.Errorf("load maxio config: %w", err)
+	}
+	return cfg, nil
 }
 
 // WithConfigOptions appends configx options used by the config module.
@@ -87,9 +93,10 @@ func New(opts ...Option) (*App, error) {
 	modules := defaultModules(options.configOptions...)
 	modules = append(modules, options.modules...)
 
-	appOptions := []dix.AppOption{
+	appOptions := make([]dix.AppOption, 0, 1+len(options.appOptions))
+	appOptions = append(appOptions,
 		dix.WithModules(modules...),
-	}
+	)
 	appOptions = append(appOptions, options.appOptions...)
 
 	runtime, err := dix.New("maxio", appOptions...).Build()
@@ -120,11 +127,9 @@ func Run(ctx context.Context, opts ...Option) error {
 // Start starts the underlying MaxIO runtime.
 func (app *App) Start(ctx context.Context) error {
 	if app == nil || app.runtime == nil {
-		return fmt.Errorf("start maxio app: runtime is nil")
+		return errors.New("start maxio app: runtime is nil")
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = runtimeContext(ctx)
 
 	app.logger.InfoContext(ctx, "maxio starting",
 		"http_address", app.cfg.HTTPAddress,
@@ -142,9 +147,7 @@ func (app *App) Stop(ctx context.Context) error {
 	if app == nil || app.runtime == nil || !app.started {
 		return nil
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = runtimeContext(ctx)
 	if err := app.runtime.Stop(ctx); err != nil {
 		return fmt.Errorf("stop maxio app: %w", err)
 	}
@@ -154,16 +157,14 @@ func (app *App) Stop(ctx context.Context) error {
 
 // Run starts the app, blocks until ctx is done, and then stops it with a fresh stop context.
 func (app *App) Run(ctx context.Context) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx = runtimeContext(ctx)
 	if err := app.Start(ctx); err != nil {
 		return err
 	}
 
 	<-ctx.Done()
 
-	stopCtx := context.Background()
+	stopCtx := context.WithoutCancel(ctx)
 	if app.stopTimeout > 0 {
 		var cancel context.CancelFunc
 		stopCtx, cancel = context.WithTimeout(stopCtx, app.stopTimeout)
@@ -191,13 +192,20 @@ func (app *App) Logger() *slog.Logger {
 // Objects returns the core object service for library callers.
 func (app *App) Objects() (*object.Service, error) {
 	if app == nil || app.runtime == nil {
-		return nil, fmt.Errorf("object service unavailable: runtime is nil")
+		return nil, errors.New("object service unavailable: runtime is nil")
 	}
 	objects, err := dix.ResolveAs[*object.Service](app.runtime.Container())
 	if err != nil {
 		return nil, fmt.Errorf("resolve object service: %w", err)
 	}
 	return objects, nil
+}
+
+func runtimeContext(ctx context.Context) context.Context {
+	if ctx != nil {
+		return ctx
+	}
+	return context.Background()
 }
 
 // Runtime returns the underlying dix runtime for advanced integrations.

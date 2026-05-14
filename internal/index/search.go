@@ -1,6 +1,7 @@
 package index
 
 import (
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -76,24 +77,38 @@ func (s *SearchEngine) Search(query model.SearchQuery) model.SearchResult {
 		return s.searchFromMemory(query)
 	}
 
+	hits, err := s.searchIndex(query)
+	if err != nil {
+		s.logger.Warn("search index query failed", "error", err)
+		return s.searchFromMemory(query)
+	}
+	return s.resultFromHits(query, hits)
+}
+
+func (s *SearchEngine) searchIndex(query model.SearchQuery) ([]string, error) {
 	req := bleve.NewSearchRequest(s.buildQuery(query))
 	if query.Limit > 0 {
 		req.Size = query.Limit
 	}
 	req.Fields = []string{"*"}
-
 	result, err := s.index.Search(req)
 	if err != nil {
-		s.logger.Warn("search index query failed", "error", err)
-		return s.searchFromMemory(query)
+		return nil, fmt.Errorf("search bleve index: %w", err)
 	}
+	ids := make([]string, 0, len(result.Hits))
+	for _, hit := range result.Hits {
+		ids = append(ids, hit.ID)
+	}
+	return ids, nil
+}
 
+func (s *SearchEngine) resultFromHits(query model.SearchQuery, hitIDs []string) model.SearchResult {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	items := list.NewListWithCapacity[model.ObjectMeta](len(result.Hits))
-	for _, hit := range result.Hits {
-		meta, ok := s.items[hit.ID]
+	items := list.NewListWithCapacity[model.ObjectMeta](len(hitIDs))
+	for _, id := range hitIDs {
+		meta, ok := s.items[id]
 		if !ok {
 			continue
 		}
@@ -173,18 +188,7 @@ func (s *SearchEngine) buildQuery(criteria model.SearchQuery) qry.Query {
 	}
 
 	if criteria.MinSize > 0 || criteria.MaxSize > 0 {
-		var minSize, maxSize *float64
-		if criteria.MinSize > 0 {
-			minSizeValue := float64(criteria.MinSize)
-			minSize = &minSizeValue
-		}
-		if criteria.MaxSize > 0 {
-			maxSizeValue := float64(criteria.MaxSize)
-			maxSize = &maxSizeValue
-		}
-		size := bleve.NewNumericRangeQuery(minSize, maxSize)
-		size.SetField("size")
-		queries = append(queries, size)
+		queries = append(queries, sizeRangeQuery(criteria))
 	}
 
 	if len(queries) == 0 {
@@ -194,6 +198,21 @@ func (s *SearchEngine) buildQuery(criteria model.SearchQuery) qry.Query {
 		return queries[0]
 	}
 	return bleve.NewConjunctionQuery(queries...)
+}
+
+func sizeRangeQuery(criteria model.SearchQuery) qry.Query {
+	var minSize, maxSize *float64
+	if criteria.MinSize > 0 {
+		minSizeValue := float64(criteria.MinSize)
+		minSize = &minSizeValue
+	}
+	if criteria.MaxSize > 0 {
+		maxSizeValue := float64(criteria.MaxSize)
+		maxSize = &maxSizeValue
+	}
+	size := bleve.NewNumericRangeQuery(minSize, maxSize)
+	size.SetField("size")
+	return size
 }
 
 func objectID(bucket, key string) string {

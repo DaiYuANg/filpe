@@ -1,3 +1,4 @@
+// Package raft integrates Dragonboat with MaxIO metadata replication.
 package raft
 
 import (
@@ -17,35 +18,35 @@ var configureDragonboatLoggerOnce sync.Once
 
 func (l *dragonboatSlogLogger) SetLevel(_ dlog.LogLevel) {}
 
-func (l *dragonboatSlogLogger) Debugf(format string, args ...interface{}) {
+func (l *dragonboatSlogLogger) Debugf(format string, args ...any) {
 	if l.base == nil {
 		return
 	}
 	l.base.Debug(fmt.Sprintf(format, args...), "component", "dragonboat", "pkg", l.pkg)
 }
 
-func (l *dragonboatSlogLogger) Infof(format string, args ...interface{}) {
+func (l *dragonboatSlogLogger) Infof(format string, args ...any) {
 	if l.base == nil {
 		return
 	}
 	l.base.Info(fmt.Sprintf(format, args...), "component", "dragonboat", "pkg", l.pkg)
 }
 
-func (l *dragonboatSlogLogger) Warningf(format string, args ...interface{}) {
+func (l *dragonboatSlogLogger) Warningf(format string, args ...any) {
 	if l.base == nil {
 		return
 	}
 	l.base.Warn(fmt.Sprintf(format, args...), "component", "dragonboat", "pkg", l.pkg)
 }
 
-func (l *dragonboatSlogLogger) Errorf(format string, args ...interface{}) {
+func (l *dragonboatSlogLogger) Errorf(format string, args ...any) {
 	if l.base == nil {
 		return
 	}
 	l.base.Error(fmt.Sprintf(format, args...), "component", "dragonboat", "pkg", l.pkg)
 }
 
-func (l *dragonboatSlogLogger) Panicf(format string, args ...interface{}) {
+func (l *dragonboatSlogLogger) Panicf(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	if l.base == nil {
 		panic(msg)

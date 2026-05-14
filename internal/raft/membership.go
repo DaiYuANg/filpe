@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -88,8 +88,6 @@ func sortedRemoved(input map[uint64]struct{}) []uint64 {
 	for replicaID := range input {
 		removed = append(removed, replicaID)
 	}
-	sort.Slice(removed, func(i, j int) bool {
-		return removed[i] < removed[j]
-	})
+	slices.Sort(removed)
 	return removed
 }

@@ -55,25 +55,39 @@ func NewService(
 }
 
 func (s *Service) ListBuckets(ctx context.Context) ([]Bucket, error) {
-	return s.store.ListBuckets(ctx)
+	buckets, err := s.store.ListBuckets(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list buckets: %w", err)
+	}
+	return buckets, nil
 }
 
 func (s *Service) CreateBucket(ctx context.Context, name string) error {
-	return s.store.CreateBucket(ctx, name)
+	if err := s.store.CreateBucket(ctx, name); err != nil {
+		return fmt.Errorf("create bucket: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) DeleteBucket(ctx context.Context, name string) error {
-	return s.store.DeleteBucket(ctx, name)
+	if err := s.store.DeleteBucket(ctx, name); err != nil {
+		return fmt.Errorf("delete bucket: %w", err)
+	}
+	return nil
 }
 
-func (s *Service) ListObjects(ctx context.Context, bucket string, prefix string) ([]ObjectMeta, error) {
-	return s.store.ListObjects(ctx, bucket, prefix)
+func (s *Service) ListObjects(ctx context.Context, bucket, prefix string) ([]ObjectMeta, error) {
+	objects, err := s.store.ListObjects(ctx, bucket, prefix)
+	if err != nil {
+		return nil, fmt.Errorf("list objects: %w", err)
+	}
+	return objects, nil
 }
 
 func (s *Service) PutObject(ctx context.Context, bucket, key string, reader io.Reader, opts PutOptions) (ObjectMeta, error) {
 	meta, err := s.store.PutObject(ctx, bucket, key, reader, opts.ContentType)
 	if err != nil {
-		return ObjectMeta{}, err
+		return ObjectMeta{}, fmt.Errorf("put object: %w", err)
 	}
 	if err := s.publishObjectEvent(ctx, "object.updated", meta); err != nil {
 		s.logger.WarnContext(ctx, "publish object event failed", "event", "object.updated", "error", err)
@@ -83,13 +97,17 @@ func (s *Service) PutObject(ctx context.Context, bucket, key string, reader io.R
 }
 
 func (s *Service) GetObject(ctx context.Context, bucket, key string) (io.ReadCloser, ObjectMeta, error) {
-	return s.store.GetObject(ctx, bucket, key)
+	body, meta, err := s.store.GetObject(ctx, bucket, key)
+	if err != nil {
+		return nil, ObjectMeta{}, fmt.Errorf("get object: %w", err)
+	}
+	return body, meta, nil
 }
 
 func (s *Service) StatObject(ctx context.Context, bucket, key string) (ObjectMeta, error) {
 	body, meta, err := s.store.GetObject(ctx, bucket, key)
 	if err != nil {
-		return ObjectMeta{}, err
+		return ObjectMeta{}, fmt.Errorf("stat object: %w", err)
 	}
 	if body != nil {
 		if closeErr := body.Close(); closeErr != nil {
@@ -102,7 +120,7 @@ func (s *Service) StatObject(ctx context.Context, bucket, key string) (ObjectMet
 func (s *Service) DeleteObject(ctx context.Context, bucket, key string) (ObjectMeta, error) {
 	meta, err := s.store.DeleteObject(ctx, bucket, key)
 	if err != nil {
-		return ObjectMeta{}, err
+		return ObjectMeta{}, fmt.Errorf("delete object: %w", err)
 	}
 	if err := s.publishObjectEvent(ctx, "object.deleted", meta); err != nil {
 		s.logger.WarnContext(ctx, "publish object event failed", "event", "object.deleted", "error", err)
@@ -123,7 +141,7 @@ func (s *Service) publishObjectEvent(ctx context.Context, eventType string, meta
 	payload, err := mapper.Map[map[string]any](meta, mapper.WithFallbackTags("json"))
 	if err != nil {
 		s.logger.WarnContext(ctx, "object event mapping failed", "event", eventType, "error", err)
-		return err
+		return fmt.Errorf("map object event: %w", err)
 	}
 	if err := s.bus.Publish(ctx, ObjectEvent{
 		Event:   eventType,

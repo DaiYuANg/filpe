@@ -1,3 +1,4 @@
+// Package model contains shared MaxIO data models.
 package model
 
 import "time"

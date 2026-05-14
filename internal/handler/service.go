@@ -126,53 +126,65 @@ func (s *Service) handleBucket(w http.ResponseWriter, r *http.Request, bucket st
 func (s *Service) handleObject(w http.ResponseWriter, r *http.Request, bucket, key string) {
 	switch r.Method {
 	case http.MethodGet:
-		body, meta, err := s.objects.GetObject(r.Context(), bucket, key)
-		if err != nil {
-			s.writeError(w, err)
-			return
-		}
-		reqCtx := r.Context()
-		defer func(ctx context.Context) {
-			if closeErr := body.Close(); closeErr != nil {
-				s.logger.WarnContext(ctx, "close object body failed", "error", closeErr)
-			}
-		}(reqCtx)
-		w.Header().Set("ETag", meta.ETag)
-		w.Header().Set("Content-Type", contentTypeOrDefault(meta.ContentType))
-		w.Header().Set("Content-Length", formatInt(meta.Size))
-		w.WriteHeader(http.StatusOK)
-		if _, copyErr := io.Copy(w, body); copyErr != nil {
-			s.logger.WarnContext(reqCtx, "copy object body failed", "error", copyErr)
-		}
+		s.handleGetObject(w, r, bucket, key)
 	case http.MethodHead:
-		meta, err := s.objects.StatObject(r.Context(), bucket, key)
-		if err != nil {
-			s.writeError(w, err)
-			return
-		}
-		w.Header().Set("ETag", meta.ETag)
-		w.Header().Set("Content-Type", contentTypeOrDefault(meta.ContentType))
-		w.Header().Set("Content-Length", formatInt(meta.Size))
-		w.WriteHeader(http.StatusOK)
+		s.handleHeadObject(w, r, bucket, key)
 	case http.MethodPut:
-		meta, err := s.objects.PutObject(r.Context(), bucket, key, r.Body, object.PutOptions{
-			ContentType: r.Header.Get("Content-Type"),
-		})
-		if err != nil {
-			s.writeError(w, err)
-			return
-		}
-		s.writeJSON(w, http.StatusOK, meta)
+		s.handlePutObject(w, r, bucket, key)
 	case http.MethodDelete:
-		_, err := s.objects.DeleteObject(r.Context(), bucket, key)
-		if err != nil {
-			s.writeError(w, err)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
+		s.handleDeleteObject(w, r, bucket, key)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Service) handleGetObject(w http.ResponseWriter, r *http.Request, bucket, key string) {
+	body, meta, err := s.objects.GetObject(r.Context(), bucket, key)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	reqCtx := r.Context()
+	defer func(ctx context.Context) {
+		if closeErr := body.Close(); closeErr != nil {
+			s.logger.WarnContext(ctx, "close object body failed", "error", closeErr)
+		}
+	}(reqCtx)
+	writeObjectHeaders(w, meta)
+	w.WriteHeader(http.StatusOK)
+	if _, copyErr := io.Copy(w, body); copyErr != nil {
+		s.logger.WarnContext(reqCtx, "copy object body failed", "error", copyErr)
+	}
+}
+
+func (s *Service) handleHeadObject(w http.ResponseWriter, r *http.Request, bucket, key string) {
+	meta, err := s.objects.StatObject(r.Context(), bucket, key)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	writeObjectHeaders(w, meta)
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Service) handlePutObject(w http.ResponseWriter, r *http.Request, bucket, key string) {
+	meta, err := s.objects.PutObject(r.Context(), bucket, key, r.Body, object.PutOptions{
+		ContentType: r.Header.Get("Content-Type"),
+	})
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, meta)
+}
+
+func (s *Service) handleDeleteObject(w http.ResponseWriter, r *http.Request, bucket, key string) {
+	_, err := s.objects.DeleteObject(r.Context(), bucket, key)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Service) handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -198,57 +210,6 @@ func (s *Service) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, result)
-}
-
-type addReplicaRequest struct {
-	ReplicaID uint64 `json:"replica_id"`
-	Target    string `json:"target"`
-}
-
-func (s *Service) handleClusterMembers(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		membership, err := s.raft.GetMembership(r.Context())
-		if err != nil {
-			s.writeError(w, err)
-			return
-		}
-		s.writeJSON(w, http.StatusOK, membership)
-	case http.MethodPost:
-		var req addReplicaRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, err)
-			return
-		}
-		if err := s.raft.AddReplica(r.Context(), req.ReplicaID, req.Target); err != nil {
-			s.writeError(w, err)
-			return
-		}
-		s.writeJSON(w, http.StatusAccepted, map[string]any{
-			"replica_id": req.ReplicaID,
-			"target":     req.Target,
-			"status":     "added",
-		})
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (s *Service) handleClusterMember(w http.ResponseWriter, r *http.Request, replicaID string) {
-	if r.Method != http.MethodDelete {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	id, err := strconv.ParseUint(replicaID, 10, 64)
-	if err != nil {
-		s.writeError(w, err)
-		return
-	}
-	if err := s.raft.RemoveReplica(r.Context(), id); err != nil {
-		s.writeError(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Service) writeJSON(w http.ResponseWriter, code int, value any) {
@@ -284,4 +245,10 @@ func contentTypeOrDefault(v string) string {
 
 func formatInt(v int64) string {
 	return strconv.FormatInt(v, 10)
+}
+
+func writeObjectHeaders(w http.ResponseWriter, meta object.ObjectMeta) {
+	w.Header().Set("ETag", meta.ETag)
+	w.Header().Set("Content-Type", contentTypeOrDefault(meta.ContentType))
+	w.Header().Set("Content-Length", formatInt(meta.Size))
 }

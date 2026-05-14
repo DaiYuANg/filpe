@@ -1,8 +1,10 @@
+// Package store coordinates metadata and object storage engine operations.
 package store
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -19,7 +21,7 @@ var (
 	ErrEngineFailed   = errors.New("storage engine failed")
 )
 
-// Store is the unified object store: metadata (Badger) + engine (erasure-coded file storage).
+// Store is the unified object store: Raft metadata + erasure-coded file storage.
 type Store struct {
 	meta   metadata.MetadataStore
 	engine *engine.Engine
@@ -33,7 +35,7 @@ func NewStore(dataDir string, meta metadata.MetadataStore, e *engine.Engine) (*S
 		var err error
 		e, err = engine.NewEngine(dataDir, engine.DefaultDataChunks, engine.DefaultParityChunks, nil)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("create storage engine: %w", err)
 		}
 	}
 	return &Store{
@@ -45,7 +47,11 @@ func NewStore(dataDir string, meta metadata.MetadataStore, e *engine.Engine) (*S
 // --- Bucket operations (metadata only) ---
 
 func (s *Store) ListBuckets(ctx context.Context) ([]model.Bucket, error) {
-	return s.meta.ListBuckets(ctx)
+	buckets, err := s.meta.ListBuckets(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list buckets: %w", mapStoreError(err))
+	}
+	return buckets, nil
 }
 
 func (s *Store) CreateBucket(ctx context.Context, name string) error {
@@ -62,7 +68,7 @@ func (s *Store) DeleteBucket(ctx context.Context, name string) error {
 
 // --- Object operations (delegated to engine) ---
 
-func (s *Store) ListObjects(ctx context.Context, bucket string, prefix string) ([]model.ObjectMeta, error) {
+func (s *Store) ListObjects(ctx context.Context, bucket, prefix string) ([]model.ObjectMeta, error) {
 	bucket = strings.TrimSpace(bucket)
 	exists, err := s.meta.BucketExists(ctx, bucket)
 	if err != nil {
@@ -78,7 +84,7 @@ func (s *Store) ListObjects(ctx context.Context, bucket string, prefix string) (
 func (s *Store) PutObject(ctx context.Context, bucket, key string, reader io.Reader, contentType string) (model.ObjectMeta, error) {
 	meta, err := s.engine.PutObject(ctx, bucket, key, reader, contentType)
 	if err != nil {
-		return model.ObjectMeta{}, ErrEngineFailed
+		return model.ObjectMeta{}, fmt.Errorf("%w: %w", ErrEngineFailed, err)
 	}
 	// Also persist metadata
 	err = s.meta.UpsertObjectMeta(ctx, model.ObjectMeta{
@@ -91,7 +97,7 @@ func (s *Store) PutObject(ctx context.Context, bucket, key string, reader io.Rea
 		UpdatedAt:   meta.UpdatedAt,
 	})
 	if err != nil {
-		return model.ObjectMeta{}, err
+		return model.ObjectMeta{}, fmt.Errorf("upsert object metadata: %w", mapStoreError(err))
 	}
 	return model.ObjectMeta{
 		Bucket:      meta.Bucket,
@@ -139,7 +145,11 @@ func (s *Store) DeleteObject(ctx context.Context, bucket, key string) (model.Obj
 
 // CheckHealth reports shard health for an object.
 func (s *Store) CheckHealth(ctx context.Context, bucket, key string) (engine.Health, error) {
-	return s.engine.CheckHealth(ctx, bucket, key)
+	health, err := s.engine.CheckHealth(ctx, bucket, key)
+	if err != nil {
+		return engine.Health{}, fmt.Errorf("check object health: %w", mapStoreError(err))
+	}
+	return health, nil
 }
 
 func mapStoreError(err error) error {

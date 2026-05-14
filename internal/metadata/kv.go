@@ -32,13 +32,13 @@ type MetadataStore interface {
 	CreateBucket(ctx context.Context, bucket string) error
 	DeleteBucket(ctx context.Context, bucket string) error
 
-	ListObjectMetas(ctx context.Context, bucket string, prefix string) ([]model.ObjectMeta, error)
-	GetObjectMeta(ctx context.Context, bucket string, key string) (model.ObjectMeta, bool, error)
+	ListObjectMetas(ctx context.Context, bucket, prefix string) ([]model.ObjectMeta, error)
+	GetObjectMeta(ctx context.Context, bucket, key string) (model.ObjectMeta, bool, error)
 	UpsertObjectMeta(ctx context.Context, meta model.ObjectMeta) error
-	DeleteObjectMeta(ctx context.Context, bucket string, key string) (model.ObjectMeta, bool, error)
+	DeleteObjectMeta(ctx context.Context, bucket, key string) (model.ObjectMeta, bool, error)
 
 	GetBlobRef(ctx context.Context, hash string) (BlobRef, bool, error)
-	CreateBlobRef(ctx context.Context, hash string, path string, size int64) error
+	CreateBlobRef(ctx context.Context, hash, path string, size int64) error
 	IncreaseBlobRef(ctx context.Context, hash string) error
 	DecreaseBlobRef(ctx context.Context, hash string) (string, bool, error)
 }
@@ -134,7 +134,7 @@ func (m *InMemoryMetadata) DeleteBucket(_ context.Context, bucket string) error 
 	return nil
 }
 
-func (m *InMemoryMetadata) ListObjectMetas(_ context.Context, bucket string, prefix string) ([]model.ObjectMeta, error) {
+func (m *InMemoryMetadata) ListObjectMetas(_ context.Context, bucket, prefix string) ([]model.ObjectMeta, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -166,7 +166,7 @@ func (m *InMemoryMetadata) ListObjectMetas(_ context.Context, bucket string, pre
 	return sorted.Values(), nil
 }
 
-func (m *InMemoryMetadata) GetObjectMeta(_ context.Context, bucket string, key string) (model.ObjectMeta, bool, error) {
+func (m *InMemoryMetadata) GetObjectMeta(_ context.Context, bucket, key string) (model.ObjectMeta, bool, error) {
 	bucket = strings.TrimSpace(bucket)
 	key = strings.TrimSpace(key)
 	if bucket == "" || key == "" {
@@ -200,7 +200,7 @@ func (m *InMemoryMetadata) UpsertObjectMeta(_ context.Context, meta model.Object
 	return nil
 }
 
-func (m *InMemoryMetadata) DeleteObjectMeta(_ context.Context, bucket string, key string) (model.ObjectMeta, bool, error) {
+func (m *InMemoryMetadata) DeleteObjectMeta(_ context.Context, bucket, key string) (model.ObjectMeta, bool, error) {
 	bucket = strings.TrimSpace(bucket)
 	key = strings.TrimSpace(key)
 	if bucket == "" || key == "" {
@@ -229,7 +229,7 @@ func (m *InMemoryMetadata) GetBlobRef(_ context.Context, hash string) (BlobRef, 
 	return ref, ok, nil
 }
 
-func (m *InMemoryMetadata) CreateBlobRef(_ context.Context, hash string, path string, size int64) error {
+func (m *InMemoryMetadata) CreateBlobRef(_ context.Context, hash, path string, size int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.blobs[hash]; ok {

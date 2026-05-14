@@ -1,3 +1,4 @@
+// Package handler provides MaxIO HTTP route handlers.
 package handler
 
 import (
@@ -9,7 +10,6 @@ import (
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/logx"
 	"github.com/lyonbrown4d/maxio/internal/config"
-	raftx "github.com/lyonbrown4d/maxio/internal/raft"
 	"github.com/lyonbrown4d/maxio/object"
 )
 
@@ -21,13 +21,7 @@ func Module() dix.Module {
 			dix.Provider1(func(logger *slog.Logger) eventx.BusRuntime {
 				return eventx.New(eventx.WithMiddleware(busMiddleware(logger)))
 			}),
-			dix.Provider3(func(
-				objects *object.Service,
-				raftRuntime *raftx.Runtime,
-				logger *slog.Logger,
-			) *Service {
-				return NewService(objects, raftRuntime, logger)
-			}),
+			dix.Provider3(NewService),
 		),
 		dix.Hooks(
 			dix.OnStart2(func(_ context.Context, bus eventx.BusRuntime, logger *slog.Logger) error {
