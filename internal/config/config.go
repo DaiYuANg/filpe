@@ -14,24 +14,28 @@ import (
 const defaultConfigPath = "./config.json"
 
 type Config struct {
-	HTTPAddress string `koanf:"http_address" json:"http_address" validate:"required,min=1"`
-	DataDir     string `koanf:"data_dir" json:"data_dir" validate:"required,min=1"`
-	LogLevel    string `koanf:"log_level" json:"log_level" validate:"required,oneof=debug info warn error"`
-	RaftNodeID  uint64 `koanf:"raft_node_id" json:"raft_node_id"`
-	RaftShardID uint64 `koanf:"raft_shard_id" json:"raft_shard_id"`
-	RaftAddress string `koanf:"raft_address" json:"raft_address"`
-	RaftDataDir string `koanf:"raft_data_dir" json:"raft_data_dir"`
+	HTTPAddress        string `koanf:"http_address" json:"http_address" validate:"required,min=1"`
+	DataDir            string `koanf:"data_dir" json:"data_dir" validate:"required,min=1"`
+	LogLevel           string `koanf:"log_level" json:"log_level" validate:"required,oneof=debug info warn error"`
+	RaftNodeID         uint64 `koanf:"raft_node_id" json:"raft_node_id"`
+	RaftShardID        uint64 `koanf:"raft_shard_id" json:"raft_shard_id"`
+	RaftAddress        string `koanf:"raft_address" json:"raft_address"`
+	RaftDataDir        string `koanf:"raft_data_dir" json:"raft_data_dir"`
+	RaftBootstrap      bool   `koanf:"raft_bootstrap" json:"raft_bootstrap"`
+	RaftJoin           bool   `koanf:"raft_join" json:"raft_join"`
+	RaftInitialMembers string `koanf:"raft_initial_members" json:"raft_initial_members"`
 }
 
 func Default() Config {
 	return Config{
-		HTTPAddress: ":8080",
-		DataDir:     "./data",
-		LogLevel:    "info",
-		RaftNodeID:  1,
-		RaftShardID: 1,
-		RaftAddress: "127.0.0.1:63000",
-		RaftDataDir: "raft",
+		HTTPAddress:   ":8080",
+		DataDir:       "./data",
+		LogLevel:      "info",
+		RaftNodeID:    1,
+		RaftShardID:   1,
+		RaftAddress:   "127.0.0.1:63000",
+		RaftDataDir:   "raft",
+		RaftBootstrap: true,
 	}
 }
 
@@ -78,6 +82,7 @@ func Load(opts ...configx.Option) (Config, error) {
 	cfg.LogLevel = strings.TrimSpace(cfg.LogLevel)
 	cfg.RaftAddress = strings.TrimSpace(cfg.RaftAddress)
 	cfg.RaftDataDir = strings.TrimSpace(cfg.RaftDataDir)
+	cfg.RaftInitialMembers = strings.TrimSpace(cfg.RaftInitialMembers)
 
 	if cfg.HTTPAddress == "" {
 		return cfg, errors.New("invalid config: http_address is required")

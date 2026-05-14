@@ -11,23 +11,28 @@ import (
 	"strconv"
 	"strings"
 
+	raftx "github.com/lyonbrown4d/maxio/internal/raft"
 	"github.com/lyonbrown4d/maxio/object"
 )
 
 const defaultSearchPath = "/_search"
+const defaultClusterMembersPath = "/_cluster/members"
 
 type Service struct {
 	logger  *slog.Logger
 	objects *object.Service
+	raft    *raftx.Runtime
 }
 
 func NewService(
 	objects *object.Service,
+	raftRuntime *raftx.Runtime,
 	logger *slog.Logger,
 ) *Service {
 	return &Service{
 		logger:  logger,
 		objects: objects,
+		raft:    raftRuntime,
 	}
 }
 
@@ -46,6 +51,16 @@ func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if route == strings.Trim(defaultSearchPath, "/") {
 		s.handleSearch(w, r)
+		return
+	}
+
+	if route == strings.Trim(defaultClusterMembersPath, "/") {
+		s.handleClusterMembers(w, r)
+		return
+	}
+
+	if len(parts) == 3 && parts[0] == "_cluster" && parts[1] == "members" {
+		s.handleClusterMember(w, r, parts[2])
 		return
 	}
 
@@ -183,6 +198,57 @@ func (s *Service) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, result)
+}
+
+type addReplicaRequest struct {
+	ReplicaID uint64 `json:"replica_id"`
+	Target    string `json:"target"`
+}
+
+func (s *Service) handleClusterMembers(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		membership, err := s.raft.GetMembership(r.Context())
+		if err != nil {
+			s.writeError(w, err)
+			return
+		}
+		s.writeJSON(w, http.StatusOK, membership)
+	case http.MethodPost:
+		var req addReplicaRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.writeError(w, err)
+			return
+		}
+		if err := s.raft.AddReplica(r.Context(), req.ReplicaID, req.Target); err != nil {
+			s.writeError(w, err)
+			return
+		}
+		s.writeJSON(w, http.StatusAccepted, map[string]any{
+			"replica_id": req.ReplicaID,
+			"target":     req.Target,
+			"status":     "added",
+		})
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Service) handleClusterMember(w http.ResponseWriter, r *http.Request, replicaID string) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	id, err := strconv.ParseUint(replicaID, 10, 64)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if err := s.raft.RemoveReplica(r.Context(), id); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Service) writeJSON(w http.ResponseWriter, code int, value any) {
