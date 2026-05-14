@@ -13,8 +13,10 @@ import (
 	httpxfiber "github.com/arcgolabs/httpx/adapter/fiber"
 	fiberapp "github.com/gofiber/fiber/v2"
 	fiberadapter "github.com/gofiber/fiber/v2/middleware/adaptor"
+	fiberhtml "github.com/gofiber/template/html/v2"
 	"github.com/lyonbrown4d/maxio/internal/config"
 	"github.com/lyonbrown4d/maxio/internal/handler"
+	"github.com/lyonbrown4d/maxio/internal/http/web"
 )
 
 type httpRuntime struct {
@@ -30,7 +32,10 @@ func Module() dix.Module {
 		"http",
 		dix.WithModuleProviders(
 			dix.Provider0(func() *fiberapp.App {
-				return fiberapp.New()
+				views := fiberhtml.NewFileSystem(web.TemplateFileSystem(), ".html")
+				return fiberapp.New(fiberapp.Config{
+					Views: views,
+				})
 			}),
 			dix.Provider2(func(
 				logger *slog.Logger,
@@ -55,6 +60,7 @@ func Module() dix.Module {
 			dix.OnStart(func(ctx context.Context, rt *httpRuntime) error {
 				router := stdhttp.NewServeMux()
 				rt.service.RegisterHTTP(router)
+				rt.app.Get("/_admin", rt.handleAdmin)
 				rt.app.All("/*", fiberadapter.HTTPHandler(router))
 
 				go func() {
@@ -78,4 +84,12 @@ func Module() dix.Module {
 			}),
 		),
 	)
+}
+
+func (rt *httpRuntime) handleAdmin(c *fiberapp.Ctx) error {
+	c.Set("Cache-Control", "no-store")
+	return c.Render("admin", fiberapp.Map{
+		"Product": "MaxIO",
+		"Title":   "MaxIO Control Plane",
+	})
 }

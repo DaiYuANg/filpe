@@ -20,7 +20,7 @@ func (rt *Runtime) ProposeMetadata(ctx context.Context, command MetadataCommand)
 		return MetadataResult{}, fmt.Errorf("marshal metadata command: %w", err)
 	}
 
-	ctx, cancel := withRaftOperationTimeout(ctx)
+	ctx, cancel := rt.withRaftOperationTimeout(ctx)
 	defer cancel()
 
 	session := rt.node.GetNoOPSession(rt.cfg.shardID)
@@ -37,7 +37,7 @@ func (rt *Runtime) ReadMetadata(ctx context.Context, query MetadataQuery) (Metad
 		return MetadataResult{}, errors.New("raft runtime is not ready")
 	}
 
-	ctx, cancel := withRaftOperationTimeout(ctx)
+	ctx, cancel := rt.withRaftOperationTimeout(ctx)
 	defer cancel()
 
 	value, err := rt.node.SyncRead(ctx, rt.cfg.shardID, query)
@@ -48,12 +48,16 @@ func (rt *Runtime) ReadMetadata(ctx context.Context, query MetadataQuery) (Metad
 	return resultFromMetadataEnvelope(value)
 }
 
-func withRaftOperationTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+func (rt *Runtime) withRaftOperationTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	timeout := defaultRaftOperationTimeout
+	if rt != nil && rt.cfg != nil && rt.cfg.operationTimeout > 0 {
+		timeout = rt.cfg.operationTimeout
+	}
 	if ctx == nil {
-		return context.WithTimeout(context.Background(), defaultRaftOperationTimeout)
+		return context.WithTimeout(context.Background(), timeout)
 	}
 	if _, ok := ctx.Deadline(); ok {
 		return ctx, func() {}
 	}
-	return context.WithTimeout(ctx, defaultRaftOperationTimeout)
+	return context.WithTimeout(ctx, timeout)
 }

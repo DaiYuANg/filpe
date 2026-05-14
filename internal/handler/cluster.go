@@ -11,6 +11,10 @@ type addReplicaRequest struct {
 	Target    string `json:"target"`
 }
 
+type syncReplicasRequest struct {
+	Nodes map[uint64]string `json:"nodes"`
+}
+
 func (s *Service) handleClusterMembers(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -35,6 +39,18 @@ func (s *Service) handleClusterMembers(w http.ResponseWriter, r *http.Request) {
 			"target":     req.Target,
 			"status":     "added",
 		})
+	case http.MethodPut:
+		var req syncReplicasRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.writeError(w, err)
+			return
+		}
+		result, err := s.raft.SyncReplicas(r.Context(), req.Nodes)
+		if err != nil {
+			s.writeError(w, err)
+			return
+		}
+		s.writeJSON(w, http.StatusOK, result)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}

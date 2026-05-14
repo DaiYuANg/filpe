@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/arcgolabs/dix"
 	dragonboat "github.com/lni/dragonboat/v4"
@@ -18,17 +19,18 @@ import (
 )
 
 type runtimeConfig struct {
-	shardID        uint64
-	replicaID      uint64
-	raftAddress    string
-	nodeHostDir    string
-	bootstrap      bool
-	join           bool
-	initialMembers map[uint64]dragonboat.Target
-	rttMs          uint64
-	electionRTT    uint64
-	heartbeatRTT   uint64
-	deploymentID   uint64
+	shardID          uint64
+	replicaID        uint64
+	raftAddress      string
+	nodeHostDir      string
+	bootstrap        bool
+	join             bool
+	initialMembers   map[uint64]dragonboat.Target
+	rttMs            uint64
+	electionRTT      uint64
+	heartbeatRTT     uint64
+	deploymentID     uint64
+	operationTimeout time.Duration
 }
 
 type Runtime struct {
@@ -74,16 +76,17 @@ func newRuntimeConfig(cfg config.Config) (*runtimeConfig, error) {
 		return nil, err
 	}
 	rtCfg := &runtimeConfig{
-		raftAddress:    cfg.RaftAddress,
-		shardID:        cfg.RaftShardID,
-		replicaID:      cfg.RaftNodeID,
-		nodeHostDir:    nodeHostDir(cfg),
-		bootstrap:      cfg.RaftBootstrap,
-		join:           cfg.RaftJoin,
-		initialMembers: initialMembers,
-		rttMs:          200,
-		electionRTT:    20,
-		heartbeatRTT:   2,
+		raftAddress:      cfg.RaftAddress,
+		shardID:          cfg.RaftShardID,
+		replicaID:        cfg.RaftNodeID,
+		nodeHostDir:      nodeHostDir(cfg),
+		bootstrap:        cfg.RaftBootstrap,
+		join:             cfg.RaftJoin,
+		initialMembers:   initialMembers,
+		rttMs:            200,
+		electionRTT:      20,
+		heartbeatRTT:     2,
+		operationTimeout: cfg.RaftOperationTimeoutDuration(),
 	}
 	rtCfg.applyDefaults()
 	if validateErr := validateInitialMembers(rtCfg); validateErr != nil {
