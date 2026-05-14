@@ -26,6 +26,7 @@ type Bucket = model.Bucket
 type ObjectMeta = model.ObjectMeta
 type SearchQuery = model.SearchQuery
 type SearchResult = model.SearchResult
+type Health = engine.Health
 type RepairResult = engine.RepairResult
 
 type PutOptions struct {
@@ -124,6 +125,14 @@ func (s *Service) DeleteObject(ctx context.Context, bucket, key string) (ObjectM
 	}
 	s.search.Remove(bucket, key)
 	return meta, nil
+}
+
+func (s *Service) CheckHealth(ctx context.Context, bucket, key string) (Health, error) {
+	health, err := s.store.CheckHealth(ctx, bucket, key)
+	if err != nil {
+		return Health{}, fmt.Errorf("check object health: %w", err)
+	}
+	return health, nil
 }
 
 func (s *Service) RepairObject(ctx context.Context, bucket, key string) (RepairResult, error) {

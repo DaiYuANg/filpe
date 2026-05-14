@@ -39,6 +39,11 @@ type Runtime struct {
 	logger *slog.Logger
 }
 
+var (
+	ErrLeaderUnavailable = errors.New("raft: leader unavailable")
+	ErrNotLeader         = errors.New("raft: local replica is not leader")
+)
+
 func Module() dix.Module {
 	return dix.NewModule(
 		"raft",
@@ -180,6 +185,28 @@ func (rt *Runtime) NodeHost() *dragonboat.NodeHost {
 		return nil
 	}
 	return rt.node
+}
+
+func (rt *Runtime) AssertLeader(ctx context.Context) error {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("raft leader context: %w", err)
+		}
+	}
+	if rt == nil || rt.cfg == nil || rt.node == nil {
+		return ErrLeaderUnavailable
+	}
+	leaderID, _, valid, err := rt.node.GetLeaderID(rt.cfg.shardID)
+	if err != nil {
+		return fmt.Errorf("get raft leader: %w", err)
+	}
+	if !valid || leaderID == 0 {
+		return ErrLeaderUnavailable
+	}
+	if leaderID != rt.cfg.replicaID {
+		return fmt.Errorf("%w: leader=%d local=%d", ErrNotLeader, leaderID, rt.cfg.replicaID)
+	}
+	return nil
 }
 
 func (rt *Runtime) startupMembers() map[uint64]dragonboat.Target {

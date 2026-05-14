@@ -1,0 +1,225 @@
+// Package repair schedules and runs background object shard repair.
+package repair
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+
+	"github.com/arcgolabs/dix"
+	gocron "github.com/go-co-op/gocron/v2"
+	"github.com/lyonbrown4d/maxio/internal/config"
+	"github.com/lyonbrown4d/maxio/internal/scheduler"
+	"github.com/lyonbrown4d/maxio/object"
+)
+
+const repairJobName = "maxio.object.repair"
+
+// Summary reports one repair scan result.
+type Summary struct {
+	Buckets         int
+	Objects         int
+	Unhealthy       int
+	RepairAttempts  int
+	RepairedObjects int
+	RepairedShards  int
+	Unrecoverable   int
+	Failed          int
+	Limited         bool
+}
+
+// Runtime owns the scheduled repair job.
+type Runtime struct {
+	cfg       config.Config
+	objects   *object.Service
+	scheduler *scheduler.Runtime
+	logger    *slog.Logger
+}
+
+func Module() dix.Module {
+	return dix.NewModule(
+		"repair",
+		dix.WithModuleProviders(
+			dix.Provider4(NewRuntime),
+		),
+		dix.Hooks(
+			dix.OnStart(startRuntime),
+		),
+	)
+}
+
+func NewRuntime(
+	cfg config.Config,
+	objects *object.Service,
+	schedulerRuntime *scheduler.Runtime,
+	logger *slog.Logger,
+) *Runtime {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &Runtime{
+		cfg:       cfg,
+		objects:   objects,
+		scheduler: schedulerRuntime,
+		logger:    logger,
+	}
+}
+
+func startRuntime(ctx context.Context, runtime *Runtime) error {
+	if runtime == nil {
+		return nil
+	}
+	return runtime.Start(ctx)
+}
+
+func (runtime *Runtime) Start(ctx context.Context) error {
+	interval := runtime.cfg.RepairIntervalDuration()
+	if _, err := runtime.scheduler.NewJob(
+		gocron.DurationJob(interval),
+		gocron.NewTask(runtime.runScheduled),
+		gocron.WithName(repairJobName),
+		gocron.WithTags("repair", "storage"),
+	); err != nil {
+		return fmt.Errorf("schedule repair job: %w", err)
+	}
+	runtime.logger.InfoContext(ctx, "object repair job scheduled",
+		"job", repairJobName,
+		"interval", interval.String(),
+		"max_batch", runtime.cfg.RepairMaxBatch,
+	)
+	if runtime.cfg.RepairOnStart {
+		runtime.startInitialRepair(ctx)
+	}
+	return nil
+}
+
+func (runtime *Runtime) startInitialRepair(ctx context.Context) {
+	if ctx == nil {
+		runtime.logger.Warn("skip initial repair: nil context")
+		return
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		defer cancel()
+		if err := runtime.scheduler.RequireLeader(runCtx); err != nil {
+			runtime.logger.DebugContext(runCtx, "skip initial repair on non-leader", "error", err)
+			return
+		}
+		runtime.runScheduled(runCtx)
+	}()
+}
+
+func (runtime *Runtime) runScheduled(ctx context.Context) {
+	summary, err := runtime.RunOnce(ctx)
+	if err != nil {
+		runtime.logger.ErrorContext(ctx, "object repair job failed", "error", err)
+		return
+	}
+	attrs := summaryAttrs(summary)
+	if summary.Unhealthy > 0 || summary.Failed > 0 {
+		runtime.logger.InfoContext(ctx, "object repair job completed", attrs...)
+		return
+	}
+	runtime.logger.DebugContext(ctx, "object repair job completed", attrs...)
+}
+
+func summaryAttrs(summary Summary) []any {
+	return []any{
+		"buckets", summary.Buckets,
+		"objects", summary.Objects,
+		"unhealthy", summary.Unhealthy,
+		"repair_attempts", summary.RepairAttempts,
+		"repaired_objects", summary.RepairedObjects,
+		"repaired_shards", summary.RepairedShards,
+		"unrecoverable", summary.Unrecoverable,
+		"failed", summary.Failed,
+		"limited", summary.Limited,
+	}
+}
+
+func (runtime *Runtime) RunOnce(ctx context.Context) (Summary, error) {
+	if runtime == nil || runtime.objects == nil {
+		return Summary{}, errors.New("repair runtime unavailable")
+	}
+	buckets, err := runtime.objects.ListBuckets(ctx)
+	if err != nil {
+		return Summary{}, fmt.Errorf("list buckets for repair: %w", err)
+	}
+	summary := Summary{Buckets: len(buckets)}
+	for _, bucket := range buckets {
+		if err := scanBucket(ctx, runtime, bucket, &summary); err != nil {
+			return summary, err
+		}
+		if summary.Limited {
+			return summary, nil
+		}
+	}
+	return summary, nil
+}
+
+func scanBucket(ctx context.Context, runtime *Runtime, bucket object.Bucket, summary *Summary) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("scan repair bucket context: %w", err)
+	}
+	objects, err := runtime.objects.ListObjects(ctx, bucket.Name, "")
+	if err != nil {
+		summary.Failed++
+		runtime.logger.WarnContext(ctx, "list objects for repair failed", "bucket", bucket.Name, "error", err)
+		return nil
+	}
+	for idx := range objects {
+		if shouldStopRepair(runtime.cfg, summary) {
+			summary.Limited = true
+			return nil
+		}
+		if err := repairObject(ctx, runtime, &objects[idx], summary); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func shouldStopRepair(cfg config.Config, summary *Summary) bool {
+	return cfg.RepairMaxBatch > 0 && summary.RepairAttempts >= cfg.RepairMaxBatch
+}
+
+func repairObject(ctx context.Context, runtime *Runtime, meta *object.ObjectMeta, summary *Summary) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("repair object context: %w", err)
+	}
+	summary.Objects++
+	health, err := runtime.objects.CheckHealth(ctx, meta.Bucket, meta.Key)
+	if err != nil {
+		summary.Failed++
+		runtime.logger.WarnContext(ctx, "check object health failed", "bucket", meta.Bucket, "key", meta.Key, "error", err)
+		return nil
+	}
+	if health.Missing == 0 {
+		return nil
+	}
+	summary.Unhealthy++
+	if !health.Recoverable {
+		summary.Unrecoverable++
+		runtime.logger.WarnContext(ctx, "object shards are not recoverable",
+			"bucket", meta.Bucket,
+			"key", meta.Key,
+			"missing", health.Missing,
+			"available", health.Available,
+			"total_chunks", health.TotalChunks,
+		)
+		return nil
+	}
+	summary.RepairAttempts++
+	result, err := runtime.objects.RepairObject(ctx, meta.Bucket, meta.Key)
+	if err != nil {
+		summary.Failed++
+		runtime.logger.WarnContext(ctx, "repair object failed", "bucket", meta.Bucket, "key", meta.Key, "error", err)
+		return nil
+	}
+	if len(result.Repaired) > 0 {
+		summary.RepairedObjects++
+		summary.RepairedShards += len(result.Repaired)
+	}
+	return nil
+}

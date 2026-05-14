@@ -31,6 +31,9 @@ type Config struct {
 	GossipAdvertiseAddress string `json:"gossip_advertise_address" koanf:"gossip_advertise_address"`
 	GossipSeeds            string `json:"gossip_seeds"             koanf:"gossip_seeds"`
 	PendingObjectTTL       string `json:"pending_object_ttl"       koanf:"pending_object_ttl"       validate:"required,min=1"`
+	RepairInterval         string `json:"repair_interval"          koanf:"repair_interval"          validate:"required,min=1"`
+	RepairOnStart          bool   `json:"repair_on_start"          koanf:"repair_on_start"`
+	RepairMaxBatch         int    `json:"repair_max_batch"         koanf:"repair_max_batch"`
 }
 
 func Default() Config {
@@ -46,6 +49,9 @@ func Default() Config {
 		RaftOperationTimeout: "5s",
 		GossipBindAddress:    "0.0.0.0:7946",
 		PendingObjectTTL:     "1h",
+		RepairInterval:       "10m",
+		RepairOnStart:        true,
+		RepairMaxBatch:       100,
 	}
 }
 
@@ -139,6 +145,7 @@ func trim(cfg Config) Config {
 	cfg.GossipAdvertiseAddress = strings.TrimSpace(cfg.GossipAdvertiseAddress)
 	cfg.GossipSeeds = strings.TrimSpace(cfg.GossipSeeds)
 	cfg.PendingObjectTTL = strings.TrimSpace(cfg.PendingObjectTTL)
+	cfg.RepairInterval = strings.TrimSpace(cfg.RepairInterval)
 	return cfg
 }
 
@@ -177,6 +184,12 @@ func applyZeroDefaults(cfg Config) Config {
 	if cfg.GossipBindAddress == "" {
 		cfg.GossipBindAddress = Default().GossipBindAddress
 	}
+	if cfg.RepairInterval == "" {
+		cfg.RepairInterval = Default().RepairInterval
+	}
+	if cfg.RepairMaxBatch <= 0 {
+		cfg.RepairMaxBatch = Default().RepairMaxBatch
+	}
 	return cfg
 }
 
@@ -186,6 +199,9 @@ func validateDurations(cfg Config) error {
 	}
 	if _, err := time.ParseDuration(cfg.PendingObjectTTL); err != nil {
 		return fmt.Errorf("invalid config: pending_object_ttl: %w", err)
+	}
+	if _, err := time.ParseDuration(cfg.RepairInterval); err != nil {
+		return fmt.Errorf("invalid config: repair_interval: %w", err)
 	}
 	return nil
 }
@@ -202,6 +218,14 @@ func (cfg Config) PendingObjectTTLDuration() time.Duration {
 	duration, err := time.ParseDuration(cfg.PendingObjectTTL)
 	if err != nil {
 		return time.Hour
+	}
+	return duration
+}
+
+func (cfg Config) RepairIntervalDuration() time.Duration {
+	duration, err := time.ParseDuration(cfg.RepairInterval)
+	if err != nil {
+		return 10 * time.Minute
 	}
 	return duration
 }
