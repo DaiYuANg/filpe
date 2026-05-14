@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lyonbrown4d/maxio/internal/model"
 	"github.com/spf13/afero"
 )
 
@@ -32,17 +33,21 @@ type Engine struct {
 	coder        *Coder
 	backend      ShardStore
 	layoutCache  sync.Map // string -> *Layout
+	nodes        map[string]StorageNode
+	localNodeID  string
+	planner      PlacementPlanner
 }
 
 // ObjectMeta stores object metadata (moved from metadata module).
 type ObjectMeta struct {
-	Bucket      string    `json:"bucket"`
-	Key         string    `json:"key"`
-	Hash        string    `json:"hash"`
-	ETag        string    `json:"etag"`
-	Size        int64     `json:"size"`
-	ContentType string    `json:"content_type"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	Bucket          string                 `json:"bucket"`
+	Key             string                 `json:"key"`
+	Hash            string                 `json:"hash"`
+	ETag            string                 `json:"etag"`
+	Size            int64                  `json:"size"`
+	ContentType     string                 `json:"content_type"`
+	UpdatedAt       time.Time              `json:"updated_at"`
+	ShardPlacements []model.ShardPlacement `json:"shard_placements,omitempty"`
 }
 
 // ObjectInfo is ObjectMeta + erasure coding info.
@@ -104,7 +109,7 @@ func NewEngine(dataDir string, dataChunks, parityChunks int, fs afero.Fs) (*Engi
 		return nil, fmt.Errorf("engine: create erasure coder: %w", err)
 	}
 
-	return &Engine{
+	engine := &Engine{
 		fs:           fs,
 		root:         root,
 		dataChunks:   dataChunks,
@@ -112,7 +117,9 @@ func NewEngine(dataDir string, dataChunks, parityChunks int, fs afero.Fs) (*Engi
 		shardSize:    shardSize,
 		coder:        coder,
 		backend:      backend,
-	}, nil
+	}
+	engine.ConfigureLocalNode(DefaultLocalNodeID, DefaultLocalNodeAddress)
+	return engine, nil
 }
 
 // PutObject writes an object to the engine with erasure coding.
@@ -159,18 +166,19 @@ func (e *Engine) LinkObject(
 
 	layoutID := layoutHash(layoutKey(bucket, key))
 	layout := &Layout{
-		ID:          layoutID,
-		ShardDir:    blob.ShardDir,
-		Hash:        blob.Hash,
-		Bucket:      bucket,
-		Key:         key,
-		Size:        blob.Size,
-		ETag:        blob.ETag,
-		ShardSize:   e.shardSize,
-		CoderType:   fmt.Sprintf("%d+%d", e.dataChunks, e.parityChunks),
-		ContentType: contentType,
-		UpdatedAt:   updatedAt,
-		Version:     1,
+		ID:              layoutID,
+		ShardDir:        blob.ShardDir,
+		Hash:            blob.Hash,
+		ShardPlacements: e.resolveBlobPlacements(ctx, bucket, key, blob),
+		Bucket:          bucket,
+		Key:             key,
+		Size:            blob.Size,
+		ETag:            blob.ETag,
+		ShardSize:       e.shardSize,
+		CoderType:       fmt.Sprintf("%d+%d", e.dataChunks, e.parityChunks),
+		ContentType:     contentType,
+		UpdatedAt:       updatedAt,
+		Version:         1,
 	}
 
 	// Write metadata
@@ -187,13 +195,14 @@ func (e *Engine) LinkObject(
 
 	return ObjectInfo{
 		ObjectMeta: ObjectMeta{
-			Bucket:      bucket,
-			Key:         key,
-			Hash:        blob.Hash,
-			ETag:        blob.ETag,
-			Size:        blob.Size,
-			ContentType: contentType,
-			UpdatedAt:   updatedAt,
+			Bucket:          bucket,
+			Key:             key,
+			Hash:            blob.Hash,
+			ETag:            blob.ETag,
+			Size:            blob.Size,
+			ContentType:     contentType,
+			UpdatedAt:       updatedAt,
+			ShardPlacements: cloneShardPlacements(layout.ShardPlacements),
 		},
 		DataChunks:   e.dataChunks,
 		ParityChunks: e.parityChunks,
@@ -211,11 +220,11 @@ func (e *Engine) GetObject(ctx context.Context, bucket, key string) (io.ReadClos
 		return nil, ObjectInfo{}, err
 	}
 
-	shards, available, err := e.readAvailableShards(layout)
+	shards, available, err := e.readAvailableShards(ctx, layout)
 	if err != nil {
 		return nil, ObjectInfo{}, err
 	}
-	if ensureErr := e.ensureReadableShards(layout, shards, available); ensureErr != nil {
+	if ensureErr := e.ensureReadableShards(ctx, layout, shards, available); ensureErr != nil {
 		return nil, ObjectInfo{}, ensureErr
 	}
 
@@ -268,26 +277,5 @@ func (e *Engine) CheckHealth(ctx context.Context, bucket, key string) (Health, e
 	if err != nil {
 		return Health{}, err
 	}
-	return e.healthFromLayout(layout), nil
+	return e.healthFromLayout(ctx, layout), nil
 }
-
-func (e *Engine) healthFromLayout(layout *Layout) Health {
-	total := e.coder.TotalChunks()
-	available := 0
-	for i := range total {
-		if e.backend.ShardExists(layout.ShardDir, layout.Hash, i) {
-			available++
-		}
-	}
-
-	return Health{
-		Bucket:      layout.Bucket,
-		Key:         layout.Key,
-		TotalChunks: total,
-		Available:   available,
-		Missing:     total - available,
-		Recoverable: available >= e.dataChunks,
-	}
-}
-
-// ListObjects returns metadata for all objects in the engine (scans filesystem).

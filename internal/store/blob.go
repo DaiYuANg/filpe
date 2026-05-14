@@ -153,13 +153,14 @@ func (s *Store) releaseBlob(ctx context.Context, hash string) error {
 
 func objectMetaFromInfo(info engine.ObjectInfo) model.ObjectMeta {
 	return model.ObjectMeta{
-		Bucket:      info.Bucket,
-		Key:         info.Key,
-		Hash:        info.Hash,
-		ETag:        info.ETag,
-		Size:        info.Size,
-		ContentType: info.ContentType,
-		UpdatedAt:   info.UpdatedAt,
-		State:       model.ObjectStateCommitted,
+		Bucket:          info.Bucket,
+		Key:             info.Key,
+		Hash:            info.Hash,
+		ETag:            info.ETag,
+		Size:            info.Size,
+		ContentType:     info.ContentType,
+		UpdatedAt:       info.UpdatedAt,
+		State:           model.ObjectStateCommitted,
+		ShardPlacements: info.ShardPlacements,
 	}
 }

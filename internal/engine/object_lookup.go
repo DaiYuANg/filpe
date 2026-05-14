@@ -166,23 +166,23 @@ func (s *objectLayoutScanner) normalize(layout *Layout) {
 	}
 }
 
-func (e *Engine) canRebuild(layout *Layout) bool {
+func (e *Engine) canRebuild(ctx context.Context, layout *Layout) bool {
 	total := e.coder.TotalChunks()
 	available := 0
 	for i := range total {
-		if e.backend.ShardExists(layout.ShardDir, layout.Hash, i) {
+		if e.shardExists(ctx, layout, i) {
 			available++
 		}
 	}
 	return available >= e.dataChunks
 }
 
-func (e *Engine) rebuildShards(layout *Layout) error {
+func (e *Engine) rebuildShards(ctx context.Context, layout *Layout) error {
 	total := e.coder.TotalChunks()
 	shards := make([][]byte, total)
 
 	for i := range total {
-		data, err := e.backend.ReadShard(layout.ShardDir, layout.Hash, i)
+		data, err := e.readShard(ctx, layout, i)
 		if err != nil {
 			return fmt.Errorf("engine: read shard for rebuild: %w", err)
 		}
@@ -198,7 +198,7 @@ func (e *Engine) rebuildShards(layout *Layout) error {
 	// Write rebuilt shards
 	for i := range total {
 		if shards[i] != nil {
-			if err := e.backend.WriteShard(layout.ShardDir, layout.Hash, i, shards[i]); err != nil {
+			if err := e.writeShard(ctx, e.shardPlacement(layout, i), layout.ShardDir, layout.Hash, i, shards[i]); err != nil {
 				return fmt.Errorf("engine: write rebuilt shard: %w", err)
 			}
 		}
@@ -206,12 +206,12 @@ func (e *Engine) rebuildShards(layout *Layout) error {
 	return nil
 }
 
-func (e *Engine) readAvailableShards(layout *Layout) ([][]byte, int, error) {
+func (e *Engine) readAvailableShards(ctx context.Context, layout *Layout) ([][]byte, int, error) {
 	total := e.coder.TotalChunks()
 	shards := make([][]byte, total)
 	available := 0
 	for i := range total {
-		data, err := e.backend.ReadShard(layout.ShardDir, layout.Hash, i)
+		data, err := e.readShard(ctx, layout, i)
 		if err != nil {
 			return nil, 0, fmt.Errorf("engine: read shard %d: %w", i, err)
 		}
@@ -224,17 +224,17 @@ func (e *Engine) readAvailableShards(layout *Layout) ([][]byte, int, error) {
 	return shards, available, nil
 }
 
-func (e *Engine) ensureReadableShards(layout *Layout, shards [][]byte, available int) error {
+func (e *Engine) ensureReadableShards(ctx context.Context, layout *Layout, shards [][]byte, available int) error {
 	if available >= e.dataChunks {
 		return nil
 	}
-	if !e.canRebuild(layout) {
+	if !e.canRebuild(ctx, layout) {
 		return ErrShardRecoveryFailed
 	}
-	if err := e.rebuildShards(layout); err != nil {
+	if err := e.rebuildShards(ctx, layout); err != nil {
 		return fmt.Errorf("%w: %w", ErrShardRecoveryFailed, err)
 	}
-	available, err := e.fillMissingShards(layout, shards)
+	available, err := e.fillMissingShards(ctx, layout, shards)
 	if err != nil {
 		return err
 	}
@@ -244,14 +244,14 @@ func (e *Engine) ensureReadableShards(layout *Layout, shards [][]byte, available
 	return nil
 }
 
-func (e *Engine) fillMissingShards(layout *Layout, shards [][]byte) (int, error) {
+func (e *Engine) fillMissingShards(ctx context.Context, layout *Layout, shards [][]byte) (int, error) {
 	available := 0
 	for i := range shards {
 		if shards[i] != nil {
 			available++
 			continue
 		}
-		data, err := e.backend.ReadShard(layout.ShardDir, layout.Hash, i)
+		data, err := e.readShard(ctx, layout, i)
 		if err != nil {
 			return 0, fmt.Errorf("engine: re-read shard %d: %w", i, err)
 		}
@@ -271,13 +271,14 @@ func (e *Engine) objectInfoFromLayout(layout *Layout) ObjectInfo {
 	}
 	return ObjectInfo{
 		ObjectMeta: ObjectMeta{
-			Bucket:      layout.Bucket,
-			Key:         layout.Key,
-			Hash:        layout.Hash,
-			ETag:        layout.ETag,
-			Size:        layout.Size,
-			ContentType: layout.ContentType,
-			UpdatedAt:   updatedAt,
+			Bucket:          layout.Bucket,
+			Key:             layout.Key,
+			Hash:            layout.Hash,
+			ETag:            layout.ETag,
+			Size:            layout.Size,
+			ContentType:     layout.ContentType,
+			UpdatedAt:       updatedAt,
+			ShardPlacements: cloneShardPlacements(layout.ShardPlacements),
 		},
 		DataChunks:   e.dataChunks,
 		ParityChunks: e.parityChunks,

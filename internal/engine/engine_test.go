@@ -9,8 +9,11 @@ import (
 	"testing"
 
 	"github.com/lyonbrown4d/maxio/internal/engine"
+	"github.com/lyonbrown4d/maxio/internal/model"
 	"github.com/spf13/afero"
 )
+
+const defaultTotalChunks = engine.DefaultDataChunks + engine.DefaultParityChunks
 
 func newTestEngine(t *testing.T) *engine.Engine {
 	t.Helper()
@@ -20,6 +23,22 @@ func newTestEngine(t *testing.T) *engine.Engine {
 		t.Fatalf("create test engine: %v", err)
 	}
 	return e
+}
+
+func assertDefaultLocalPlacements(t *testing.T, placements []model.ShardPlacement) {
+	t.Helper()
+	if len(placements) != defaultTotalChunks {
+		t.Fatalf("ShardPlacements = %d, want %d", len(placements), defaultTotalChunks)
+	}
+	for index := range placements {
+		placement := placements[index]
+		if placement.Index != index {
+			t.Errorf("ShardPlacements[%d].Index = %d, want %d", index, placement.Index, index)
+		}
+		if placement.NodeID != engine.DefaultLocalNodeID {
+			t.Errorf("ShardPlacements[%d].NodeID = %q, want %q", index, placement.NodeID, engine.DefaultLocalNodeID)
+		}
+	}
 }
 
 func TestNewEngine(t *testing.T) {
@@ -48,6 +67,7 @@ func TestPutAndGetObject(t *testing.T) {
 	if meta.ETag == "" {
 		t.Error("ETag is empty")
 	}
+	assertDefaultLocalPlacements(t, meta.ShardPlacements)
 
 	reader, objInfo, err := e.GetObject(ctx, "test-bucket", "test-key.txt")
 	if err != nil {
@@ -111,6 +131,7 @@ func TestGetObjectAfterEngineRestart(t *testing.T) {
 	if objInfo.ContentType != meta.ContentType {
 		t.Errorf("ContentType = %s, want %s", objInfo.ContentType, meta.ContentType)
 	}
+	assertDefaultLocalPlacements(t, objInfo.ShardPlacements)
 }
 
 func TestGetObjectPreservesTrailingZeroBytes(t *testing.T) {

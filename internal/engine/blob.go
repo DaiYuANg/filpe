@@ -8,14 +8,17 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/lyonbrown4d/maxio/internal/model"
 )
 
 // BlobInfo describes a stored content blob independent from object metadata.
 type BlobInfo struct {
-	Hash     string
-	ETag     string
-	Size     int64
-	ShardDir string
+	Hash            string
+	ETag            string
+	Size            int64
+	ShardDir        string
+	ShardPlacements []model.ShardPlacement
 }
 
 func HashBytes(data []byte) string {
@@ -58,17 +61,26 @@ func (e *Engine) PutBlobBytes(ctx context.Context, key string, data []byte) (Blo
 	}
 
 	shardDir := makeShardDir(key)
+	placements, err := e.PlanShardPlacement(ctx, PlacementRequest{
+		Key:        key,
+		Hash:       hash,
+		ShardCount: len(shards),
+	})
+	if err != nil {
+		return BlobInfo{}, err
+	}
 	for i, shard := range shards {
-		if writeErr := e.backend.WriteShard(shardDir, hash, i, shard); writeErr != nil {
+		if writeErr := e.writeShard(ctx, placements[i], shardDir, hash, i, shard); writeErr != nil {
 			return BlobInfo{}, fmt.Errorf("engine: write shard %d: %w", i, writeErr)
 		}
 	}
 
 	return BlobInfo{
-		Hash:     hash,
-		ETag:     ETagFromHash(hash),
-		Size:     int64(len(data)),
-		ShardDir: shardDir,
+		Hash:            hash,
+		ETag:            ETagFromHash(hash),
+		Size:            int64(len(data)),
+		ShardDir:        shardDir,
+		ShardPlacements: cloneShardPlacements(placements),
 	}, nil
 }
 

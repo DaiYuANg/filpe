@@ -1,0 +1,148 @@
+package engine
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/lyonbrown4d/maxio/internal/model"
+)
+
+type StorageNode interface {
+	ID() string
+	Address() string
+	WriteShard(ctx context.Context, shardDir, hash string, index int, data []byte) error
+	ReadShard(ctx context.Context, shardDir, hash string, index int) ([]byte, error)
+	ShardExists(ctx context.Context, shardDir, hash string, index int) bool
+}
+
+type LocalStorageNode struct {
+	id      string
+	address string
+	store   ShardStore
+}
+
+func NewLocalStorageNode(id, address string, store ShardStore) *LocalStorageNode {
+	id = strings.TrimSpace(id)
+	address = strings.TrimSpace(address)
+	if id == "" {
+		id = DefaultLocalNodeID
+	}
+	if address == "" {
+		address = DefaultLocalNodeAddress
+	}
+	return &LocalStorageNode{
+		id:      id,
+		address: address,
+		store:   store,
+	}
+}
+
+func (node *LocalStorageNode) ID() string {
+	if node == nil || node.id == "" {
+		return DefaultLocalNodeID
+	}
+	return node.id
+}
+
+func (node *LocalStorageNode) Address() string {
+	if node == nil || node.address == "" {
+		return DefaultLocalNodeAddress
+	}
+	return node.address
+}
+
+func (node *LocalStorageNode) WriteShard(ctx context.Context, shardDir, hash string, index int, data []byte) error {
+	if err := contextError(ctx, "write local shard"); err != nil {
+		return err
+	}
+	if node == nil || node.store == nil {
+		return errors.New("local storage node store is required")
+	}
+	if err := node.store.WriteShard(shardDir, hash, index, data); err != nil {
+		return fmt.Errorf("write local shard: %w", err)
+	}
+	return nil
+}
+
+func (node *LocalStorageNode) ReadShard(ctx context.Context, shardDir, hash string, index int) ([]byte, error) {
+	if err := contextError(ctx, "read local shard"); err != nil {
+		return nil, err
+	}
+	if node == nil || node.store == nil {
+		return nil, errors.New("local storage node store is required")
+	}
+	data, err := node.store.ReadShard(shardDir, hash, index)
+	if err != nil {
+		return nil, fmt.Errorf("read local shard: %w", err)
+	}
+	return data, nil
+}
+
+func (node *LocalStorageNode) ShardExists(ctx context.Context, shardDir, hash string, index int) bool {
+	if contextError(ctx, "check local shard") != nil {
+		return false
+	}
+	if node == nil || node.store == nil {
+		return false
+	}
+	return node.store.ShardExists(shardDir, hash, index)
+}
+
+func (e *Engine) writeShard(ctx context.Context, placement model.ShardPlacement, shardDir, hash string, index int, data []byte) error {
+	node, err := e.storageNode(placement)
+	if err != nil {
+		return err
+	}
+	if err := node.WriteShard(ctx, shardDir, hash, index, data); err != nil {
+		return fmt.Errorf("write shard to node %q: %w", node.ID(), err)
+	}
+	return nil
+}
+
+func (e *Engine) readShard(ctx context.Context, layout *Layout, index int) ([]byte, error) {
+	placement := e.shardPlacement(layout, index)
+	node, err := e.storageNode(placement)
+	if err != nil {
+		return nil, err
+	}
+	data, err := node.ReadShard(ctx, layout.ShardDir, layout.Hash, index)
+	if err != nil {
+		return nil, fmt.Errorf("read shard from node %q: %w", node.ID(), err)
+	}
+	return data, nil
+}
+
+func (e *Engine) shardExists(ctx context.Context, layout *Layout, index int) bool {
+	placement := e.shardPlacement(layout, index)
+	node, err := e.storageNode(placement)
+	if err != nil {
+		return false
+	}
+	return node.ShardExists(ctx, layout.ShardDir, layout.Hash, index)
+}
+
+func (e *Engine) storageNode(placement model.ShardPlacement) (StorageNode, error) {
+	nodeID := strings.TrimSpace(placement.NodeID)
+	if nodeID == "" {
+		nodeID = e.localNodeID
+	}
+	e.mu.RLock()
+	node := e.nodes[nodeID]
+	e.mu.RUnlock()
+	if node == nil {
+		return nil, fmt.Errorf("storage node %q is not registered", nodeID)
+	}
+	return node, nil
+}
+
+func contextError(ctx context.Context, operation string) error {
+	if ctx == nil {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("%s context: %w", operation, err)
+	}
+	return nil
+}
