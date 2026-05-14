@@ -14,7 +14,6 @@ import (
 )
 
 const defaultTotalChunks = engine.DefaultDataChunks + engine.DefaultParityChunks
-
 func newTestEngine(t *testing.T) *engine.Engine {
 	t.Helper()
 	fs := afero.NewMemMapFs()
