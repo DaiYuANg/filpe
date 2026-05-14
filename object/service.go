@@ -8,6 +8,7 @@ import (
 
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/mapper"
+	"github.com/lyonbrown4d/maxio/internal/engine"
 	"github.com/lyonbrown4d/maxio/internal/index"
 	"github.com/lyonbrown4d/maxio/internal/model"
 	"github.com/lyonbrown4d/maxio/internal/store"
@@ -25,6 +26,7 @@ type Bucket = model.Bucket
 type ObjectMeta = model.ObjectMeta
 type SearchQuery = model.SearchQuery
 type SearchResult = model.SearchResult
+type RepairResult = engine.RepairResult
 
 type PutOptions struct {
 	ContentType string
@@ -122,6 +124,14 @@ func (s *Service) DeleteObject(ctx context.Context, bucket, key string) (ObjectM
 	}
 	s.search.Remove(bucket, key)
 	return meta, nil
+}
+
+func (s *Service) RepairObject(ctx context.Context, bucket, key string) (RepairResult, error) {
+	result, err := s.store.RepairObject(ctx, bucket, key)
+	if err != nil {
+		return RepairResult{}, fmt.Errorf("repair object: %w", err)
+	}
+	return result, nil
 }
 
 func (s *Service) Search(ctx context.Context, query SearchQuery) (SearchResult, error) {

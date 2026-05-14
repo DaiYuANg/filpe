@@ -162,6 +162,18 @@ func (s *Store) CheckHealth(ctx context.Context, bucket, key string) (engine.Hea
 	return health, nil
 }
 
+// RepairObject reconstructs and writes missing shards for one recoverable object.
+func (s *Store) RepairObject(ctx context.Context, bucket, key string) (engine.RepairResult, error) {
+	if _, err := s.StatObject(ctx, bucket, key); err != nil {
+		return engine.RepairResult{}, err
+	}
+	result, err := s.engine.RepairObject(ctx, bucket, key)
+	if err != nil {
+		return engine.RepairResult{}, fmt.Errorf("repair object shards: %w", mapStoreError(err))
+	}
+	return result, nil
+}
+
 func mapStoreError(err error) error {
 	if err == nil {
 		return nil

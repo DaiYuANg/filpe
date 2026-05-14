@@ -268,7 +268,10 @@ func (e *Engine) CheckHealth(ctx context.Context, bucket, key string) (Health, e
 	if err != nil {
 		return Health{}, err
 	}
+	return e.healthFromLayout(layout), nil
+}
 
+func (e *Engine) healthFromLayout(layout *Layout) Health {
 	total := e.coder.TotalChunks()
 	available := 0
 	for i := range total {
@@ -284,7 +287,7 @@ func (e *Engine) CheckHealth(ctx context.Context, bucket, key string) (Health, e
 		Available:   available,
 		Missing:     total - available,
 		Recoverable: available >= e.dataChunks,
-	}, nil
+	}
 }
 
 // ListObjects returns metadata for all objects in the engine (scans filesystem).
