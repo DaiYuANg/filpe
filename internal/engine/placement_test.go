@@ -64,3 +64,38 @@ func TestRegisterStorageNodeRejectsEmptyID(t *testing.T) {
 		t.Fatal("expected register with empty id to fail")
 	}
 }
+
+func TestSyncStorageNodesFromRaft(t *testing.T) {
+	e := newTestEngine(t)
+
+	err := e.SyncStorageNodesFromRaft(1, map[uint64]string{
+		1: "127.0.0.1:7001",
+		2: "127.0.0.1:7002",
+		3: "127.0.0.1:7003",
+	})
+	if err != nil {
+		t.Fatalf("sync storage nodes: %v", err)
+	}
+
+	nodes := e.StorageNodes()
+	if len(nodes) != 3 {
+		t.Fatalf("storage nodes = %d, want %d", len(nodes), 3)
+	}
+
+	expected := map[string]bool{
+		"raft-1": false,
+		"raft-2": false,
+		"raft-3": false,
+	}
+	for _, node := range nodes {
+		nodeID := node.ID()
+		if _, ok := expected[nodeID]; ok {
+			expected[nodeID] = true
+		}
+	}
+	for nodeID, seen := range expected {
+		if !seen {
+			t.Errorf("node %s not synced", nodeID)
+		}
+	}
+}

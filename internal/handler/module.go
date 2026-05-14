@@ -21,7 +21,7 @@ func Module() dix.Module {
 			dix.Provider1(func(logger *slog.Logger) eventx.BusRuntime {
 				return eventx.New(eventx.WithMiddleware(busMiddleware(logger)))
 			}),
-			dix.Provider5(NewService),
+			dix.Provider6(NewService),
 		),
 		dix.Hooks(
 			dix.OnStart2(func(_ context.Context, bus eventx.BusRuntime, logger *slog.Logger) error {

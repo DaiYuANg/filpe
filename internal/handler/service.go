@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/lyonbrown4d/maxio/internal/discovery"
+	"github.com/lyonbrown4d/maxio/internal/engine"
 	raftx "github.com/lyonbrown4d/maxio/internal/raft"
 	maxios3 "github.com/lyonbrown4d/maxio/internal/s3"
 	"github.com/lyonbrown4d/maxio/object"
@@ -24,6 +25,7 @@ const defaultDiscoveryPath = "/_cluster/discovery"
 type Service struct {
 	logger    *slog.Logger
 	objects   *object.Service
+	engine    *engine.Engine
 	raft      *raftx.Runtime
 	discovery *discovery.Runtime
 	s3        *maxios3.Service
@@ -31,6 +33,7 @@ type Service struct {
 
 func NewService(
 	objects *object.Service,
+	engineStore *engine.Engine,
 	raftRuntime *raftx.Runtime,
 	discoveryRuntime *discovery.Runtime,
 	s3Service *maxios3.Service,
@@ -39,6 +42,7 @@ func NewService(
 	return &Service{
 		logger:    logger,
 		objects:   objects,
+		engine:    engineStore,
 		raft:      raftRuntime,
 		discovery: discoveryRuntime,
 		s3:        s3Service,

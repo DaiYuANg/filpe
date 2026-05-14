@@ -23,6 +23,11 @@ type LocalStorageNode struct {
 	store   ShardStore
 }
 
+type unsupportedRemoteStorageNode struct {
+	id      string
+	address string
+}
+
 func NewLocalStorageNode(id, address string, store ShardStore) *LocalStorageNode {
 	id = strings.TrimSpace(id)
 	address = strings.TrimSpace(address)
@@ -88,6 +93,36 @@ func (node *LocalStorageNode) ShardExists(ctx context.Context, shardDir, hash st
 		return false
 	}
 	return node.store.ShardExists(shardDir, hash, index)
+}
+
+func (node *unsupportedRemoteStorageNode) ID() string {
+	if node == nil || strings.TrimSpace(node.id) == "" {
+		return DefaultLocalNodeID
+	}
+	return strings.TrimSpace(node.id)
+}
+
+func (node *unsupportedRemoteStorageNode) Address() string {
+	if node == nil || strings.TrimSpace(node.address) == "" {
+		return DefaultLocalNodeAddress
+	}
+	return strings.TrimSpace(node.address)
+}
+
+func (node *unsupportedRemoteStorageNode) WriteShard(_ context.Context, _, _ string, _ int, _ []byte) error {
+	return fmt.Errorf("storage node %q is remote and not yet implemented", node.ID())
+}
+
+func (node *unsupportedRemoteStorageNode) ReadShard(_ context.Context, _, _ string, _ int) ([]byte, error) {
+	return nil, fmt.Errorf("storage node %q is remote and not yet implemented", node.ID())
+}
+
+func (node *unsupportedRemoteStorageNode) ShardExists(_ context.Context, _, _ string, _ int) bool {
+	return false
+}
+
+func raftStorageNodeID(replicaID uint64) string {
+	return fmt.Sprintf("raft-%d", replicaID)
 }
 
 func (e *Engine) writeShard(ctx context.Context, placement model.ShardPlacement, shardDir, hash string, index int, data []byte) error {

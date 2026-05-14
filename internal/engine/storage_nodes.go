@@ -2,6 +2,7 @@ package engine
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 )
@@ -18,6 +19,71 @@ func (e *Engine) RegisterStorageNode(node StorageNode) error {
 	defer e.mu.Unlock()
 	e.registerStorageNodeLocked(node)
 	return nil
+}
+
+// SyncStorageNodesFromRaft replaces registered storage nodes with raft membership mapping.
+func (e *Engine) SyncStorageNodesFromRaft(localReplicaID uint64, raftNodes map[uint64]string) error {
+	if e == nil {
+		return errors.New("storage engine is required")
+	}
+	if localReplicaID == 0 {
+		return errors.New("local raft replica id must be greater than zero")
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	localNodeID := raftStorageNodeID(localReplicaID)
+	nextNodes, localNodeAddress, err := syncRaftStorageNodes(localReplicaID, raftNodes)
+	if err != nil {
+		return err
+	}
+	if localNodeAddress == "" {
+		localNodeAddress = e.localNodeAddress(localNodeID)
+	}
+
+	e.nodes = map[string]StorageNode{}
+	e.configureLocalNodeLocked(localNodeID, localNodeAddress)
+	for _, node := range nextNodes {
+		e.nodes[node.ID()] = node
+	}
+	e.reconfigurePlacementPlannerLocked()
+	return nil
+}
+
+func (e *Engine) localNodeAddress(localNodeID string) string {
+	address := DefaultLocalNodeAddress
+	if current := e.nodes[localNodeID]; current != nil {
+		address = strings.TrimSpace(current.Address())
+	}
+	if address == "" {
+		address = DefaultLocalNodeAddress
+	}
+	return address
+}
+
+func syncRaftStorageNodes(localReplicaID uint64, raftNodes map[uint64]string) (map[string]StorageNode, string, error) {
+	nodes := make(map[string]StorageNode, len(raftNodes))
+	localNodeAddress := ""
+	for replicaID, target := range raftNodes {
+		target = strings.TrimSpace(target)
+		if replicaID == 0 {
+			return nil, "", errors.New("raft replica id must be greater than zero")
+		}
+		if target == "" {
+			return nil, "", fmt.Errorf("raft target is required for replica %d", replicaID)
+		}
+
+		nodes[raftStorageNodeID(replicaID)] = &unsupportedRemoteStorageNode{
+			id:      raftStorageNodeID(replicaID),
+			address: target,
+		}
+		if replicaID == localReplicaID {
+			localNodeAddress = strings.TrimSpace(target)
+			delete(nodes, raftStorageNodeID(replicaID))
+		}
+	}
+	return nodes, localNodeAddress, nil
 }
 
 func (e *Engine) UnregisterStorageNode(nodeID string) error {
