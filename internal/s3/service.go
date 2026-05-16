@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/lyonbrown4d/maxio/internal/config"
 	"github.com/lyonbrown4d/maxio/object"
 )
 
@@ -17,15 +18,17 @@ const (
 type Service struct {
 	objects *object.Service
 	logger  *slog.Logger
+	cfg     config.Config
 }
 
-func NewService(objects *object.Service, logger *slog.Logger) *Service {
+func NewService(objects *object.Service, logger *slog.Logger, cfg config.Config) *Service {
 	if logger == nil {
 		logger = slog.Default()
 	}
 	return &Service{
 		objects: objects,
 		logger:  logger,
+		cfg:     cfg,
 	}
 }
 
@@ -48,6 +51,10 @@ func (s *Service) Match(r *http.Request) bool {
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(amzRequestIDHeader, requestID())
+	if err := s.authorize(r); err != nil {
+		s.writeError(w, http.StatusForbidden, "AccessDenied", err.Error())
+		return
+	}
 
 	bucket, key, err := splitS3Path(r.URL.Path)
 	if err != nil {

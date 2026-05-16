@@ -7,7 +7,7 @@ func Module() dix.Module {
 	return dix.NewModule(
 		"s3",
 		dix.WithModuleProviders(
-			dix.Provider2(NewService),
+			dix.Provider3(NewService),
 			dix.Provider1(NewEndpoint),
 		),
 	)

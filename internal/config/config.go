@@ -21,6 +21,9 @@ type Config struct {
 	StorageAddress         string `json:"storage_address"          koanf:"storage_address"`
 	AdminToken             string `json:"admin_token"              koanf:"admin_token"`
 	APIToken               string `json:"api_token"                koanf:"api_token"`
+	S3AccessKey            string `json:"s3_access_key"            koanf:"s3_access_key"`
+	S3SecretKey            string `json:"s3_secret_key"            koanf:"s3_secret_key"`
+	S3Region               string `json:"s3_region"                koanf:"s3_region"`
 	DataDir                string `json:"data_dir"                 koanf:"data_dir"                 validate:"required,min=1"`
 	LogLevel               string `json:"log_level"                koanf:"log_level"                validate:"required,oneof=debug info warn error"`
 	RaftNodeID             uint64 `json:"raft_node_id"             koanf:"raft_node_id"`
@@ -47,6 +50,7 @@ func Default() Config {
 	return Config{
 		HTTPAddress:          ":8080",
 		StorageAddress:       "127.0.0.1:8080",
+		S3Region:             "us-east-1",
 		DataDir:              "./data",
 		LogLevel:             "info",
 		RaftNodeID:           1,
@@ -149,6 +153,9 @@ func trim(cfg Config) Config {
 	cfg.StorageAddress = strings.TrimSpace(cfg.StorageAddress)
 	cfg.AdminToken = strings.TrimSpace(cfg.AdminToken)
 	cfg.APIToken = strings.TrimSpace(cfg.APIToken)
+	cfg.S3AccessKey = strings.TrimSpace(cfg.S3AccessKey)
+	cfg.S3SecretKey = strings.TrimSpace(cfg.S3SecretKey)
+	cfg.S3Region = strings.TrimSpace(cfg.S3Region)
 	cfg.LogLevel = strings.TrimSpace(cfg.LogLevel)
 	cfg.RaftAddress = strings.TrimSpace(cfg.RaftAddress)
 	cfg.RaftDataDir = strings.TrimSpace(cfg.RaftDataDir)
@@ -200,6 +207,9 @@ func applyZeroDefaults(cfg Config) Config {
 	}
 	if cfg.GossipBindAddress == "" {
 		cfg.GossipBindAddress = Default().GossipBindAddress
+	}
+	if cfg.S3Region == "" {
+		cfg.S3Region = Default().S3Region
 	}
 	return applyRepairZeroDefaults(cfg)
 }
@@ -278,20 +288,4 @@ func storageAddressFromHTTPAddress(address string) string {
 		host = "127.0.0.1"
 	}
 	return net.JoinHostPort(host, port)
-}
-
-func (cfg Config) RepairIntervalDuration() time.Duration {
-	duration, err := time.ParseDuration(cfg.RepairInterval)
-	if err != nil {
-		return 10 * time.Minute
-	}
-	return duration
-}
-
-func (cfg Config) RepairRetryBackoffDuration() time.Duration {
-	duration, err := time.ParseDuration(cfg.RepairRetryBackoff)
-	if err != nil {
-		return time.Second
-	}
-	return duration
 }

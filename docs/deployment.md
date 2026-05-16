@@ -23,6 +23,7 @@ Start the server with the default config path:
 
 Set `admin_token` or `MAXIO_ADMIN_TOKEN` to protect management and internal shard APIs.
 Set `api_token` or `MAXIO_API_TOKEN` to protect bucket and object APIs.
+Set `s3_access_key`, `s3_secret_key`, and `s3_region` to require SigV4 header authentication for S3-compatible APIs.
 
 Authenticated requests can use either header:
 
@@ -49,6 +50,8 @@ X-Maxio-API: <api-token>
 ```
 
 The admin token is also accepted for bucket and object routes.
+
+If both S3 key fields are empty, S3-compatible APIs run without authentication for local development. If either S3 key field is configured, both must be configured and S3 clients must send `Authorization: AWS4-HMAC-SHA256 ...` plus `X-Amz-Date`.
 
 `/healthz` and `/readyz` remain unauthenticated for load balancers.
 
