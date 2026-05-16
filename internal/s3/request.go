@@ -41,7 +41,7 @@ func isReservedNativePath(rawPath string) bool {
 func hasS3Query(query url.Values) bool {
 	for key := range query {
 		switch strings.ToLower(key) {
-		case "list-type", "location", "uploads", "uploadid", "partnumber", "versionid", "versions":
+		case "list-type", "location", "uploads", "uploadid", "partnumber", "versionid", "versions", "delete":
 			return true
 		}
 	}

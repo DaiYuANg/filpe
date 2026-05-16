@@ -67,3 +67,41 @@ type errorResult struct {
 	Resource  string   `xml:"Resource,omitempty"`
 	RequestID string   `xml:"RequestId"`
 }
+
+type bucketLocationResult struct {
+	XMLName  xml.Name `xml:"LocationConstraint"`
+	XMLNS    string   `xml:"xmlns,attr,omitempty"`
+	Location string   `xml:",chardata"`
+}
+
+type copyObjectResult struct {
+	XMLName      xml.Name `xml:"CopyObjectResult"`
+	LastModified string   `xml:"LastModified"`
+	ETag         string   `xml:"ETag"`
+}
+
+type deleteObjectsRequest struct {
+	Quiet   bool                 `xml:"Quiet"`
+	Objects []deleteObjectTarget `xml:"Object"`
+}
+
+type deleteObjectTarget struct {
+	Key string `xml:"Key"`
+}
+
+type deleteObjectsResult struct {
+	XMLName xml.Name              `xml:"DeleteResult"`
+	XMLNS   string                `xml:"xmlns,attr,omitempty"`
+	Deleted []deletedObjectResult `xml:"Deleted,omitempty"`
+	Errors  []deleteErrorResult   `xml:"Error,omitempty"`
+}
+
+type deletedObjectResult struct {
+	Key string `xml:"Key"`
+}
+
+type deleteErrorResult struct {
+	Key     string `xml:"Key"`
+	Code    string `xml:"Code"`
+	Message string `xml:"Message"`
+}

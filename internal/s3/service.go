@@ -105,11 +105,21 @@ func (s *Service) handleBucket(w http.ResponseWriter, r *http.Request, bucket st
 	case http.MethodHead:
 		s.handleHeadBucket(w, r, bucket)
 	case http.MethodGet:
+		if hasQueryKey(r.URL.Query(), "location") {
+			s.handleGetBucketLocation(w, r, bucket)
+			return
+		}
 		if hasQueryKey(r.URL.Query(), "uploads") {
 			s.handleListMultipartUploads(w, r, bucket)
 			return
 		}
 		s.handleListObjects(w, r, bucket)
+	case http.MethodPost:
+		if hasQueryKey(r.URL.Query(), "delete") {
+			s.handleDeleteObjects(w, r, bucket)
+			return
+		}
+		s.writeError(w, http.StatusMethodNotAllowed, "MethodNotAllowed", "method not allowed")
 	case http.MethodPut:
 		s.handleCreateBucket(w, r, bucket)
 	case http.MethodDelete:
@@ -164,6 +174,10 @@ func (s *Service) handleObject(w http.ResponseWriter, r *http.Request, bucket, k
 	case http.MethodGet:
 		s.handleGetObject(w, r, bucket, key)
 	case http.MethodPut:
+		if r.Header.Get("x-amz-copy-source") != "" {
+			s.handleCopyObject(w, r, bucket, key)
+			return
+		}
 		s.handlePutObject(w, r, bucket, key)
 	case http.MethodDelete:
 		s.handleDeleteObject(w, r, bucket, key)
