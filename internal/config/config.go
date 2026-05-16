@@ -36,6 +36,8 @@ type Config struct {
 	RepairInterval         string `json:"repair_interval"          koanf:"repair_interval"          validate:"required,min=1"`
 	RepairOnStart          bool   `json:"repair_on_start"          koanf:"repair_on_start"`
 	RepairMaxBatch         int    `json:"repair_max_batch"         koanf:"repair_max_batch"`
+	RepairMaxRetries       int    `json:"repair_max_retries"       koanf:"repair_max_retries"`
+	RepairRetryBackoff     string `json:"repair_retry_backoff"     koanf:"repair_retry_backoff"     validate:"required,min=1"`
 }
 
 func Default() Config {
@@ -55,6 +57,8 @@ func Default() Config {
 		RepairInterval:       "10m",
 		RepairOnStart:        true,
 		RepairMaxBatch:       100,
+		RepairMaxRetries:     2,
+		RepairRetryBackoff:   "1s",
 	}
 }
 
@@ -150,6 +154,7 @@ func trim(cfg Config) Config {
 	cfg.GossipSeeds = strings.TrimSpace(cfg.GossipSeeds)
 	cfg.PendingObjectTTL = strings.TrimSpace(cfg.PendingObjectTTL)
 	cfg.RepairInterval = strings.TrimSpace(cfg.RepairInterval)
+	cfg.RepairRetryBackoff = strings.TrimSpace(cfg.RepairRetryBackoff)
 	return cfg
 }
 
@@ -191,8 +196,15 @@ func applyZeroDefaults(cfg Config) Config {
 	if cfg.GossipBindAddress == "" {
 		cfg.GossipBindAddress = Default().GossipBindAddress
 	}
+	return applyRepairZeroDefaults(cfg)
+}
+
+func applyRepairZeroDefaults(cfg Config) Config {
 	if cfg.RepairInterval == "" {
 		cfg.RepairInterval = Default().RepairInterval
+	}
+	if cfg.RepairRetryBackoff == "" {
+		cfg.RepairRetryBackoff = Default().RepairRetryBackoff
 	}
 	if cfg.RepairMaxBatch <= 0 {
 		cfg.RepairMaxBatch = Default().RepairMaxBatch
@@ -209,6 +221,12 @@ func validateDurations(cfg Config) error {
 	}
 	if _, err := time.ParseDuration(cfg.RepairInterval); err != nil {
 		return fmt.Errorf("invalid config: repair_interval: %w", err)
+	}
+	if _, err := time.ParseDuration(cfg.RepairRetryBackoff); err != nil {
+		return fmt.Errorf("invalid config: repair_retry_backoff: %w", err)
+	}
+	if cfg.RepairMaxRetries < 0 {
+		return errors.New("invalid config: repair_max_retries must be non-negative")
 	}
 	return nil
 }
@@ -258,6 +276,14 @@ func (cfg Config) RepairIntervalDuration() time.Duration {
 	duration, err := time.ParseDuration(cfg.RepairInterval)
 	if err != nil {
 		return 10 * time.Minute
+	}
+	return duration
+}
+
+func (cfg Config) RepairRetryBackoffDuration() time.Duration {
+	duration, err := time.ParseDuration(cfg.RepairRetryBackoff)
+	if err != nil {
+		return time.Second
 	}
 	return duration
 }

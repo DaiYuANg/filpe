@@ -25,6 +25,7 @@ type Summary struct {
 	Missing         int  `json:"missing"`
 	Corrupted       int  `json:"corrupted"`
 	RepairAttempts  int  `json:"repair_attempts"`
+	RepairRetries   int  `json:"repair_retries"`
 	RepairedObjects int  `json:"repaired_objects"`
 	RepairedShards  int  `json:"repaired_shards"`
 	Unrecoverable   int  `json:"unrecoverable"`
@@ -137,6 +138,7 @@ func summaryAttrs(summary Summary) []any {
 		"missing", summary.Missing,
 		"corrupted", summary.Corrupted,
 		"repair_attempts", summary.RepairAttempts,
+		"repair_retries", summary.RepairRetries,
 		"repaired_objects", summary.RepairedObjects,
 		"repaired_shards", summary.RepairedShards,
 		"unrecoverable", summary.Unrecoverable,
@@ -233,15 +235,15 @@ func repairObject(ctx context.Context, runtime *Runtime, meta *object.ObjectMeta
 		return nil
 	}
 	summary.RepairAttempts++
-	result, err := runtime.objects.RepairObject(ctx, meta.Bucket, meta.Key)
+	repairedShards, err := repairObjectWithRetry(ctx, runtime, meta, summary)
 	if err != nil {
 		summary.Failed++
 		runtime.logger.WarnContext(ctx, "repair object failed", "bucket", meta.Bucket, "key", meta.Key, "error", err)
 		return nil
 	}
-	if len(result.Repaired) > 0 {
+	if repairedShards > 0 {
 		summary.RepairedObjects++
-		summary.RepairedShards += len(result.Repaired)
+		summary.RepairedShards += repairedShards
 	}
 	return nil
 }
