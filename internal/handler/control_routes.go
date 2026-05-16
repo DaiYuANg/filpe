@@ -13,6 +13,9 @@ func (s *Service) handleControlRoute(w http.ResponseWriter, r *http.Request, rou
 	case isReadinessRoute(route):
 		s.handleReadiness(w, r)
 		return true
+	case isMetricsRoute(route):
+		s.handleMetrics(w, r)
+		return true
 	case s.handleS3Route(w, r):
 		return true
 	}
@@ -62,6 +65,10 @@ func isHealthRoute(route string) bool {
 
 func isReadinessRoute(route string) bool {
 	return route == "readyz" || route == "ready"
+}
+
+func isMetricsRoute(route string) bool {
+	return route == "metrics"
 }
 
 func isClusterMemberRoute(parts []string) bool {
