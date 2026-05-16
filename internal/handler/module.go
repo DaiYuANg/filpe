@@ -19,7 +19,8 @@ func Module() dix.Module {
 		dix.WithModuleProviders(
 			dix.Provider1(newLogger),
 			dix.Provider1(newEventBus),
-			dix.Provider6(NewService),
+			dix.Provider6(NewDependencies),
+			dix.Provider2(NewService),
 		),
 		dix.Hooks(
 			dix.OnStart2(startObjectEventSubscription),

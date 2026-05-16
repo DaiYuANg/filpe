@@ -18,11 +18,12 @@ func (s *Service) handleControlRoute(w http.ResponseWriter, r *http.Request, rou
 
 func (s *Service) handleNamedControlRoute(w http.ResponseWriter, r *http.Request, route string, parts []string) bool {
 	routes := map[string]func(){
-		strings.Trim(defaultSearchPath, "/"):          func() { s.handleSearch(w, r) },
-		strings.Trim(defaultClusterMembersPath, "/"):  func() { s.handleClusterMembers(w, r) },
+		strings.Trim(defaultSearchPath, "/"):           func() { s.handleSearch(w, r) },
+		strings.Trim(defaultClusterMembersPath, "/"):   func() { s.handleClusterMembers(w, r) },
 		strings.Trim(defaultClusterBootstrapPath, "/"): func() { s.handleClusterBootstrap(w, r) },
-		strings.Trim(defaultClusterJoinPath, "/"):     func() { s.handleClusterJoin(w, r) },
-		strings.Trim(defaultDiscoveryPath, "/"):       func() { s.handleDiscovery(w, r) },
+		strings.Trim(defaultClusterJoinPath, "/"):      func() { s.handleClusterJoin(w, r) },
+		strings.Trim(defaultDiscoveryPath, "/"):        func() { s.handleDiscovery(w, r) },
+		strings.Trim(defaultRepairStatusPath, "/"):     func() { s.handleRepairStatus(w, r) },
 	}
 	if routeHandler, ok := routes[route]; ok {
 		routeHandler()
@@ -45,4 +46,3 @@ func isHealthRoute(route string) bool {
 func isClusterMemberRoute(parts []string) bool {
 	return len(parts) == 3 && parts[0] == "_cluster" && parts[1] == "members"
 }
-

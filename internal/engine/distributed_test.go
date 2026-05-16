@@ -217,7 +217,7 @@ func assertRemoteNodesStoredShards(t *testing.T, nodes ...*inMemoryStorageNode) 
 
 func storageShardHandler(e *engine.Engine) *http.ServeMux {
 	logger := slog.New(slog.DiscardHandler)
-	service := handler.NewService(nil, e, nil, nil, nil, logger)
+	service := handler.NewService(handler.NewDependencies(nil, e, nil, nil, nil, nil), logger)
 	router := http.NewServeMux()
 	service.RegisterHTTP(router)
 	return router

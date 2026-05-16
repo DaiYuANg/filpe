@@ -11,10 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lyonbrown4d/maxio/internal/discovery"
-	"github.com/lyonbrown4d/maxio/internal/engine"
-	raftx "github.com/lyonbrown4d/maxio/internal/raft"
-	maxios3 "github.com/lyonbrown4d/maxio/internal/s3"
 	"github.com/lyonbrown4d/maxio/object"
 )
 
@@ -23,31 +19,17 @@ const defaultClusterMembersPath = "/_cluster/members"
 const defaultClusterBootstrapPath = "/_cluster/bootstrap"
 const defaultClusterJoinPath = "/_cluster/join"
 const defaultDiscoveryPath = "/_cluster/discovery"
+const defaultRepairStatusPath = "/_repair/status"
 
 type Service struct {
-	logger    *slog.Logger
-	objects   *object.Service
-	engine    *engine.Engine
-	raft      *raftx.Runtime
-	discovery *discovery.Runtime
-	s3        *maxios3.Service
+	logger *slog.Logger
+	Dependencies
 }
 
-func NewService(
-	objects *object.Service,
-	engineStore *engine.Engine,
-	raftRuntime *raftx.Runtime,
-	discoveryRuntime *discovery.Runtime,
-	s3Service *maxios3.Service,
-	logger *slog.Logger,
-) *Service {
+func NewService(deps Dependencies, logger *slog.Logger) *Service {
 	return &Service{
-		logger:    logger,
-		objects:   objects,
-		engine:    engineStore,
-		raft:      raftRuntime,
-		discovery: discoveryRuntime,
-		s3:        s3Service,
+		logger:       logger,
+		Dependencies: deps,
 	}
 }
 
