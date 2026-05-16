@@ -37,6 +37,7 @@ type Config struct {
 	RepairOnStart          bool   `json:"repair_on_start"          koanf:"repair_on_start"`
 	RepairMaxBatch         int    `json:"repair_max_batch"         koanf:"repair_max_batch"`
 	RepairMaxRetries       int    `json:"repair_max_retries"       koanf:"repair_max_retries"`
+	RepairRateLimit        int    `json:"repair_rate_limit"        koanf:"repair_rate_limit"`
 	RepairRetryBackoff     string `json:"repair_retry_backoff"     koanf:"repair_retry_backoff"     validate:"required,min=1"`
 }
 
@@ -227,6 +228,9 @@ func validateDurations(cfg Config) error {
 	}
 	if cfg.RepairMaxRetries < 0 {
 		return errors.New("invalid config: repair_max_retries must be non-negative")
+	}
+	if cfg.RepairRateLimit < 0 {
+		return errors.New("invalid config: repair_rate_limit must be non-negative")
 	}
 	return nil
 }

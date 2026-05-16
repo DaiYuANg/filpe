@@ -26,6 +26,7 @@ type Summary struct {
 	Corrupted       int  `json:"corrupted"`
 	RepairAttempts  int  `json:"repair_attempts"`
 	RepairRetries   int  `json:"repair_retries"`
+	Throttled       int  `json:"throttled"`
 	RepairedObjects int  `json:"repaired_objects"`
 	RepairedShards  int  `json:"repaired_shards"`
 	Unrecoverable   int  `json:"unrecoverable"`
@@ -139,6 +140,7 @@ func summaryAttrs(summary Summary) []any {
 		"corrupted", summary.Corrupted,
 		"repair_attempts", summary.RepairAttempts,
 		"repair_retries", summary.RepairRetries,
+		"throttled", summary.Throttled,
 		"repaired_objects", summary.RepairedObjects,
 		"repaired_shards", summary.RepairedShards,
 		"unrecoverable", summary.Unrecoverable,
@@ -168,8 +170,9 @@ func (runtime *Runtime) runOnce(ctx context.Context) (Summary, error) {
 		return Summary{}, fmt.Errorf("list buckets for repair: %w", err)
 	}
 	summary := Summary{Buckets: len(buckets)}
+	limiter := newRepairLimiter(runtime.cfg.RepairRateLimit)
 	for _, bucket := range buckets {
-		if err := scanBucket(ctx, runtime, bucket, &summary); err != nil {
+		if err := scanBucket(ctx, runtime, bucket, &summary, limiter); err != nil {
 			return summary, err
 		}
 		if summary.Limited {
@@ -179,7 +182,13 @@ func (runtime *Runtime) runOnce(ctx context.Context) (Summary, error) {
 	return summary, nil
 }
 
-func scanBucket(ctx context.Context, runtime *Runtime, bucket object.Bucket, summary *Summary) error {
+func scanBucket(
+	ctx context.Context,
+	runtime *Runtime,
+	bucket object.Bucket,
+	summary *Summary,
+	limiter *repairLimiter,
+) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("scan repair bucket context: %w", err)
 	}
@@ -194,7 +203,7 @@ func scanBucket(ctx context.Context, runtime *Runtime, bucket object.Bucket, sum
 			summary.Limited = true
 			return nil
 		}
-		if err := repairObject(ctx, runtime, &objects[idx], summary); err != nil {
+		if err := repairObject(ctx, runtime, &objects[idx], summary, limiter); err != nil {
 			return err
 		}
 	}
@@ -205,7 +214,13 @@ func shouldStopRepair(cfg config.Config, summary *Summary) bool {
 	return cfg.RepairMaxBatch > 0 && summary.RepairAttempts >= cfg.RepairMaxBatch
 }
 
-func repairObject(ctx context.Context, runtime *Runtime, meta *object.ObjectMeta, summary *Summary) error {
+func repairObject(
+	ctx context.Context,
+	runtime *Runtime,
+	meta *object.ObjectMeta,
+	summary *Summary,
+	limiter *repairLimiter,
+) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("repair object context: %w", err)
 	}
@@ -233,6 +248,13 @@ func repairObject(ctx context.Context, runtime *Runtime, meta *object.ObjectMeta
 			"total_chunks", health.TotalChunks,
 		)
 		return nil
+	}
+	throttled, err := limiter.Wait(ctx)
+	if err != nil {
+		return err
+	}
+	if throttled {
+		summary.Throttled++
 	}
 	summary.RepairAttempts++
 	repairedShards, err := repairObjectWithRetry(ctx, runtime, meta, summary)
