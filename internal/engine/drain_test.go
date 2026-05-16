@@ -63,6 +63,31 @@ func TestStorageNodeInfosReportsDrainState(t *testing.T) {
 	}
 }
 
+func TestRebalanceObjectFromNodeMovesDrainedPlacements(t *testing.T) {
+	ctx := context.Background()
+	eng := newTestEngine(t)
+	nodeA := newInMemoryStorageNode("node-a", "127.0.0.1:7001")
+	nodeB := newInMemoryStorageNode("node-b", "127.0.0.1:7002")
+	if err := registerDistributedPlacementNodes(t, eng, nodeA, nodeB); err != nil {
+		t.Fatal(err)
+	}
+	meta := putObjectForDrain(ctx, t, eng, "rebalance-key.txt")
+	assertPlacementIncludesNode(t, meta.ShardPlacements, nodeA.id)
+	if err := eng.DrainStorageNode(nodeA.id); err != nil {
+		t.Fatalf("drain storage node: %v", err)
+	}
+
+	result, err := eng.RebalanceObjectFromNode(ctx, "test-bucket", "rebalance-key.txt", nodeA.id)
+	if err != nil {
+		t.Fatalf("rebalance object: %v", err)
+	}
+	if len(result.Moved) == 0 {
+		t.Fatal("expected moved shards")
+	}
+	assertPlacementExcludesNode(t, result.Object.ShardPlacements, nodeA.id)
+	assertPlacementIncludesNode(t, result.Object.ShardPlacements, nodeB.id)
+}
+
 func putObjectForDrain(ctx context.Context, t *testing.T, eng *engine.Engine, key string) engine.ObjectInfo {
 	t.Helper()
 	meta, err := eng.PutObject(ctx, "test-bucket", key, strings.NewReader("drain placement payload"), "text/plain")

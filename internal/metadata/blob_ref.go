@@ -36,6 +36,18 @@ func (m *InMemoryMetadata) CreateBlobRef(
 	return nil
 }
 
+func (m *InMemoryMetadata) UpdateBlobRefPlacements(_ context.Context, hash string, placements []model.ShardPlacement) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ref, ok := m.blobs[hash]
+	if !ok {
+		return ErrObjectNotFound
+	}
+	ref.ShardPlacements = cloneBlobRefPlacements(placements)
+	m.blobs[hash] = ref
+	return nil
+}
+
 func (m *InMemoryMetadata) IncreaseBlobRef(_ context.Context, hash string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

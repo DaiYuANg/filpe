@@ -44,6 +44,7 @@ type MetadataStore interface {
 
 	GetBlobRef(ctx context.Context, hash string) (BlobRef, bool, error)
 	CreateBlobRef(ctx context.Context, hash, path string, size int64, placements []model.ShardPlacement, checksums []string) error
+	UpdateBlobRefPlacements(ctx context.Context, hash string, placements []model.ShardPlacement) error
 	IncreaseBlobRef(ctx context.Context, hash string) error
 	DecreaseBlobRef(ctx context.Context, hash string) (string, bool, error)
 }

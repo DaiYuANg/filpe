@@ -17,6 +17,31 @@ type rebalancePlanResponse struct {
 	Shards    int    `json:"shards"`
 }
 
+type rebalanceResponse struct {
+	ReplicaID uint64 `json:"replica_id"`
+	NodeID    string `json:"node_id"`
+	Objects   int    `json:"objects"`
+	Shards    int    `json:"shards"`
+}
+
+func (s *Service) handleClusterRebalance(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	replicaID, err := parseRequiredReplicaID(r)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	result, err := s.rebalanceClusterMember(r.Context(), replicaID)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, http.StatusAccepted, result)
+}
+
 func (s *Service) handleClusterRebalancePlan(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -33,6 +58,23 @@ func (s *Service) handleClusterRebalancePlan(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	s.writeJSON(w, http.StatusOK, plan)
+}
+
+func (s *Service) rebalanceClusterMember(ctx context.Context, replicaID uint64) (rebalanceResponse, error) {
+	if s == nil || s.objects == nil {
+		return rebalanceResponse{}, errors.New("object service unavailable")
+	}
+	nodeID := clusterStorageNodeID(replicaID)
+	result, err := s.objects.RebalanceNode(ctx, nodeID)
+	if err != nil {
+		return rebalanceResponse{}, fmt.Errorf("rebalance cluster member: %w", err)
+	}
+	return rebalanceResponse{
+		ReplicaID: replicaID,
+		NodeID:    result.NodeID,
+		Objects:   result.Objects,
+		Shards:    result.Shards,
+	}, nil
 }
 
 func parseRequiredReplicaID(r *http.Request) (uint64, error) {

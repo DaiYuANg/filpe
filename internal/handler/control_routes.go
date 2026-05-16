@@ -22,6 +22,7 @@ func (s *Service) handleNamedControlRoute(w http.ResponseWriter, r *http.Request
 		strings.Trim(defaultClusterMembersPath, "/"):   func() { s.handleClusterMembers(w, r) },
 		strings.Trim(defaultClusterBootstrapPath, "/"): func() { s.handleClusterBootstrap(w, r) },
 		strings.Trim(defaultClusterJoinPath, "/"):      func() { s.handleClusterJoin(w, r) },
+		strings.Trim(defaultClusterRebalancePath, "/"): func() { s.handleClusterRebalance(w, r) },
 		strings.Trim(defaultClusterRebalancePlanPath, "/"): func() {
 			s.handleClusterRebalancePlan(w, r)
 		},

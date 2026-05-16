@@ -28,6 +28,7 @@ type SearchQuery = model.SearchQuery
 type SearchResult = model.SearchResult
 type Health = engine.Health
 type RepairResult = engine.RepairResult
+type RebalanceResult = store.RebalanceResult
 
 type PutOptions struct {
 	ContentType string
@@ -139,6 +140,14 @@ func (s *Service) RepairObject(ctx context.Context, bucket, key string) (RepairR
 	result, err := s.store.RepairObject(ctx, bucket, key)
 	if err != nil {
 		return RepairResult{}, fmt.Errorf("repair object: %w", err)
+	}
+	return result, nil
+}
+
+func (s *Service) RebalanceNode(ctx context.Context, nodeID string) (RebalanceResult, error) {
+	result, err := s.store.RebalanceNode(ctx, nodeID)
+	if err != nil {
+		return RebalanceResult{}, fmt.Errorf("rebalance node: %w", err)
 	}
 	return result, nil
 }
