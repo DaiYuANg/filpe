@@ -42,6 +42,9 @@ func (s *Service) handleNamedControlRoute(w http.ResponseWriter, r *http.Request
 		},
 		strings.Trim(defaultDiscoveryPath, "/"):    func() { s.handleDiscovery(w, r) },
 		strings.Trim(defaultRepairStatusPath, "/"): func() { s.handleRepairStatus(w, r) },
+		strings.Trim(defaultRecoveryPlanPath, "/"): func() {
+			s.handleRecoveryPlan(w, r)
+		},
 		strings.Trim(defaultRecoveryStatusPath, "/"): func() {
 			s.handleRecoveryStatus(w, r)
 		},

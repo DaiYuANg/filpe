@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lyonbrown4d/maxio/internal/engine"
+	"github.com/lyonbrown4d/maxio/internal/model"
 )
 
 type RecoveryOptions struct {
@@ -29,6 +30,13 @@ type RecoveryStatus struct {
 	LastResult RecoveryResult `json:"last_result"`
 	LastError  string         `json:"last_error,omitempty"`
 	Completed  bool           `json:"completed"`
+}
+
+type RecoveryPlan struct {
+	GeneratedAt           time.Time                       `json:"generated_at"`
+	PendingObjects        []model.ObjectMeta              `json:"pending_objects,omitempty"`
+	ExpiredPendingObjects []model.ObjectMeta              `json:"expired_pending_objects,omitempty"`
+	OrphanShardCleanup    engine.OrphanShardCleanupResult `json:"orphan_shard_cleanup"`
 }
 
 type recoveryState struct {
@@ -62,6 +70,22 @@ func (s *Store) Recover(ctx context.Context, opts RecoveryOptions) (RecoveryResu
 	result.FinishedAt = time.Now().UTC()
 	s.setRecoveryStatus(result, nil)
 	return result, nil
+}
+
+func (s *Store) PlanRecovery(ctx context.Context, pendingTTL time.Duration) (RecoveryPlan, error) {
+	plan := RecoveryPlan{GeneratedAt: time.Now().UTC()}
+	pending, err := s.meta.ListStagedObjectMetas(ctx, "", "")
+	if err != nil {
+		return plan, fmt.Errorf("list staged object metadata: %w", mapStoreError(err))
+	}
+	plan.PendingObjects = pending
+	plan.ExpiredPendingObjects = expiredPendingObjects(pending, pendingTTL, plan.GeneratedAt)
+	orphanCleanup, err := s.cleanupOrphanShardSets(ctx, true)
+	if err != nil {
+		return plan, err
+	}
+	plan.OrphanShardCleanup = orphanCleanup
+	return plan, nil
 }
 
 func (s *Store) RecoveryStatus() RecoveryStatus {
@@ -107,4 +131,18 @@ func (s *Store) cleanupOrphanShardSets(ctx context.Context, dryRun bool) (engine
 		return result, fmt.Errorf("cleanup orphan shard sets: %w", mapStoreError(err))
 	}
 	return result, nil
+}
+
+func expiredPendingObjects(objects []model.ObjectMeta, ttl time.Duration, now time.Time) []model.ObjectMeta {
+	if ttl <= 0 {
+		return nil
+	}
+	cutoff := now.UTC().Add(-ttl)
+	expired := make([]model.ObjectMeta, 0)
+	for index := range objects {
+		if isExpiredPendingObject(objects[index], cutoff) {
+			expired = append(expired, objects[index])
+		}
+	}
+	return expired
 }

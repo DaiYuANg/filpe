@@ -2,6 +2,23 @@ package handler
 
 import "net/http"
 
+func (s *Service) handleRecoveryPlan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.objects == nil {
+		s.writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "object service unavailable"})
+		return
+	}
+	plan, err := s.objects.RecoveryPlan(r.Context())
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, plan)
+}
+
 func (s *Service) handleRecoveryStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

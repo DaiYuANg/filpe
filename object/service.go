@@ -32,6 +32,7 @@ type Health = engine.Health
 type RepairResult = engine.RepairResult
 type RebalanceResult = store.RebalanceResult
 type RecoveryResult = store.RecoveryResult
+type RecoveryPlan = store.RecoveryPlan
 type RecoveryStatus = store.RecoveryStatus
 
 type PutOptions = store.PutOptions
@@ -167,6 +168,14 @@ func (s *Service) Recover(ctx context.Context) (RecoveryResult, error) {
 		return RecoveryResult{}, fmt.Errorf("recover storage: %w", err)
 	}
 	return result, nil
+}
+
+func (s *Service) RecoveryPlan(ctx context.Context) (RecoveryPlan, error) {
+	plan, err := s.store.PlanRecovery(ctx, s.cfg.PendingObjectTTLDuration())
+	if err != nil {
+		return RecoveryPlan{}, fmt.Errorf("plan recovery: %w", err)
+	}
+	return plan, nil
 }
 
 func (s *Service) RecoveryStatus() RecoveryStatus {
