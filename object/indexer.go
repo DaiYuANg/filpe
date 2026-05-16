@@ -16,6 +16,10 @@ var errIndexRebuildRunning = errors.New("index rebuild already running")
 
 type IndexStatus struct {
 	Rebuilding            bool      `json:"rebuilding"`
+	QueueSize             int       `json:"queue_size"`
+	QueuedObjects         int       `json:"queued_objects"`
+	DroppedObjects        int       `json:"dropped_objects"`
+	RetriedObjects        int       `json:"retried_objects"`
 	IndexedObjects        int       `json:"indexed_objects"`
 	FailedObjects         int       `json:"failed_objects"`
 	LastIndexedAt         time.Time `json:"last_indexed_at,omitzero"`
@@ -34,13 +38,23 @@ type IndexRebuildResult struct {
 	FinishedAt time.Time `json:"finished_at"`
 }
 
-func (s *Service) StartIndexWorker(_ context.Context) error {
+type indexTask struct {
+	Event   string
+	Bucket  string
+	Key     string
+	Attempt int
+}
+
+func (s *Service) StartIndexWorker(ctx context.Context) error {
 	if s == nil || s.bus == nil || s.search == nil {
 		return nil
 	}
+	s.indexCh = make(chan indexTask, s.indexQueueSize())
+	go s.runIndexWorker(context.WithoutCancel(ctx))
+
 	_, err := eventx.Subscribe(s.bus, func(ctx context.Context, event ObjectEvent) error {
-		workerCtx := context.WithoutCancel(ctx)
-		go s.handleIndexEvent(workerCtx, event)
+		_ = ctx
+		s.enqueueIndexEvent(event)
 		return nil
 	})
 	if err != nil {
@@ -49,22 +63,69 @@ func (s *Service) StartIndexWorker(_ context.Context) error {
 	return nil
 }
 
-func (s *Service) handleIndexEvent(ctx context.Context, event ObjectEvent) {
+func (s *Service) enqueueIndexEvent(event ObjectEvent) {
 	bucket, key := eventObjectLocation(event)
 	if bucket == "" || key == "" {
 		return
 	}
-	switch event.Event {
+	task := indexTask{Event: event.Event, Bucket: bucket, Key: key}
+	select {
+	case s.indexCh <- task:
+	default:
+		s.recordIndexDrop()
+		s.logger.Warn("index queue full, dropping object event", "event", event.Event, "bucket", bucket, "key", key)
+	}
+}
+
+func (s *Service) runIndexWorker(ctx context.Context) {
+	for task := range s.indexCh {
+		if s.cfg.IndexRateLimit > 0 {
+			time.Sleep(time.Second / time.Duration(s.cfg.IndexRateLimit))
+		}
+		s.handleIndexTask(ctx, task)
+	}
+}
+
+func (s *Service) handleIndexTask(ctx context.Context, task indexTask) {
+	timeout := s.cfg.IndexTimeoutDuration()
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	switch task.Event {
 	case "object.updated":
-		if err := s.indexObject(ctx, bucket, key); err != nil {
-			s.recordIndexFailure(err)
-			s.logger.WarnContext(ctx, "index object failed", "bucket", bucket, "key", key, "error", err)
+		if err := s.indexObject(ctx, task.Bucket, task.Key); err != nil {
+			if s.retryIndexTask(task, err) {
+				return
+			}
+			s.recordIndexFailure(err, false)
+			s.logger.WarnContext(ctx, "index object failed", "bucket", task.Bucket, "key", task.Key, "error", err)
 			return
 		}
 		s.recordIndexSuccess()
 	case "object.deleted":
-		s.search.Remove(bucket, key)
+		s.search.Remove(task.Bucket, task.Key)
 	}
+}
+
+func (s *Service) retryIndexTask(task indexTask, cause error) bool {
+	if task.Attempt >= s.cfg.IndexMaxRetries {
+		return false
+	}
+	task.Attempt++
+	timer := time.NewTimer(s.cfg.IndexRetryBackoffDuration())
+	go func() {
+		defer timer.Stop()
+		<-timer.C
+		select {
+		case s.indexCh <- task:
+			s.recordIndexRetry()
+		default:
+			s.recordIndexFailure(cause, true)
+		}
+	}()
+	return true
 }
 
 func (s *Service) RebuildIndex(ctx context.Context) (IndexRebuildResult, error) {
@@ -110,7 +171,7 @@ func (s *Service) rebuildBucketIndex(ctx context.Context, bucket string, result 
 		meta := objects[index]
 		if err := s.indexObject(ctx, meta.Bucket, meta.Key); err != nil {
 			result.Failed++
-			s.recordIndexFailure(err)
+			s.recordIndexFailure(err, false)
 			s.logger.WarnContext(ctx, "rebuild object index failed", "bucket", meta.Bucket, "key", meta.Key, "error", err)
 			continue
 		}
@@ -167,18 +228,48 @@ func (s *Service) recordIndexSuccess() {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 	s.index.IndexedObjects++
+	s.index.QueuedObjects = len(s.indexCh)
+	s.index.QueueSize = cap(s.indexCh)
 	s.index.LastIndexedAt = time.Now().UTC()
 	s.index.LastError = ""
 }
 
-func (s *Service) recordIndexFailure(err error) {
+func (s *Service) recordIndexFailure(err error, dropped bool) {
 	s.indexMu.Lock()
 	defer s.indexMu.Unlock()
 	s.index.FailedObjects++
+	if dropped {
+		s.index.DroppedObjects++
+	}
+	s.index.QueuedObjects = len(s.indexCh)
+	s.index.QueueSize = cap(s.indexCh)
 	s.index.LastIndexedAt = time.Now().UTC()
 	if err != nil {
 		s.index.LastError = err.Error()
 	}
+}
+
+func (s *Service) recordIndexRetry() {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+	s.index.RetriedObjects++
+	s.index.QueuedObjects = len(s.indexCh)
+	s.index.QueueSize = cap(s.indexCh)
+}
+
+func (s *Service) recordIndexDrop() {
+	s.indexMu.Lock()
+	defer s.indexMu.Unlock()
+	s.index.DroppedObjects++
+	s.index.QueuedObjects = len(s.indexCh)
+	s.index.QueueSize = cap(s.indexCh)
+}
+
+func (s *Service) indexQueueSize() int {
+	if s.cfg.IndexQueueSize <= 0 {
+		return 1024
+	}
+	return s.cfg.IndexQueueSize
 }
 
 func eventObjectLocation(event ObjectEvent) (string, string) {

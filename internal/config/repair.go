@@ -17,3 +17,19 @@ func (cfg Config) RepairRetryBackoffDuration() time.Duration {
 	}
 	return duration
 }
+
+func (cfg Config) IndexTimeoutDuration() time.Duration {
+	duration, err := time.ParseDuration(cfg.IndexTimeout)
+	if err != nil {
+		return 30 * time.Second
+	}
+	return duration
+}
+
+func (cfg Config) IndexRetryBackoffDuration() time.Duration {
+	duration, err := time.ParseDuration(cfg.IndexRetryBackoff)
+	if err != nil {
+		return time.Second
+	}
+	return duration
+}

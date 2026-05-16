@@ -11,7 +11,7 @@ func Module() dix.Module {
 	return dix.NewModule(
 		"object",
 		dix.WithModuleProviders(
-			dix.Provider4(NewService),
+			dix.Provider5(NewService),
 		),
 		dix.Hooks(
 			dix.OnStart(func(ctx context.Context, service *Service) error {

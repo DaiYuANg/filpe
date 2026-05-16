@@ -9,6 +9,7 @@ import (
 
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/mapper"
+	"github.com/lyonbrown4d/maxio/internal/config"
 	"github.com/lyonbrown4d/maxio/internal/engine"
 	"github.com/lyonbrown4d/maxio/internal/index"
 	"github.com/lyonbrown4d/maxio/internal/model"
@@ -40,8 +41,10 @@ type Service struct {
 	store   *store.Store
 	search  *index.SearchEngine
 	bus     eventx.BusRuntime
+	cfg     config.Config
 	indexMu sync.RWMutex
 	index   IndexStatus
+	indexCh chan indexTask
 }
 
 func NewService(
@@ -49,6 +52,7 @@ func NewService(
 	search *index.SearchEngine,
 	bus eventx.BusRuntime,
 	logger *slog.Logger,
+	cfg config.Config,
 ) *Service {
 	if logger == nil {
 		logger = slog.Default()
@@ -58,6 +62,7 @@ func NewService(
 		store:  storage,
 		search: search,
 		bus:    bus,
+		cfg:    cfg,
 	}
 }
 
@@ -164,7 +169,12 @@ func (s *Service) IndexStatus() IndexStatus {
 	}
 	s.indexMu.RLock()
 	defer s.indexMu.RUnlock()
-	return s.index
+	status := s.index
+	if s.indexCh != nil {
+		status.QueuedObjects = len(s.indexCh)
+		status.QueueSize = cap(s.indexCh)
+	}
+	return status
 }
 
 func (s *Service) publishObjectEvent(ctx context.Context, eventType string, meta ObjectMeta) error {

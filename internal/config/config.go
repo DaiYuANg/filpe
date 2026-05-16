@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,6 +43,11 @@ type Config struct {
 	RepairMaxRetries       int    `json:"repair_max_retries"       koanf:"repair_max_retries"`
 	RepairRateLimit        int    `json:"repair_rate_limit"        koanf:"repair_rate_limit"`
 	RepairRetryBackoff     string `json:"repair_retry_backoff"     koanf:"repair_retry_backoff"     validate:"required,min=1"`
+	IndexTimeout           string `json:"index_timeout"            koanf:"index_timeout"            validate:"required,min=1"`
+	IndexRetryBackoff      string `json:"index_retry_backoff"      koanf:"index_retry_backoff"      validate:"required,min=1"`
+	IndexMaxRetries        int    `json:"index_max_retries"        koanf:"index_max_retries"`
+	IndexQueueSize         int    `json:"index_queue_size"         koanf:"index_queue_size"`
+	IndexRateLimit         int    `json:"index_rate_limit"         koanf:"index_rate_limit"`
 }
 
 func Default() Config {
@@ -66,6 +70,10 @@ func Default() Config {
 		RepairMaxBatch:       100,
 		RepairMaxRetries:     2,
 		RepairRetryBackoff:   "1s",
+		IndexTimeout:         "30s",
+		IndexRetryBackoff:    "1s",
+		IndexMaxRetries:      2,
+		IndexQueueSize:       1024,
 	}
 }
 
@@ -167,6 +175,8 @@ func trim(cfg Config) Config {
 	cfg.PendingObjectTTL = strings.TrimSpace(cfg.PendingObjectTTL)
 	cfg.RepairInterval = strings.TrimSpace(cfg.RepairInterval)
 	cfg.RepairRetryBackoff = strings.TrimSpace(cfg.RepairRetryBackoff)
+	cfg.IndexTimeout = strings.TrimSpace(cfg.IndexTimeout)
+	cfg.IndexRetryBackoff = strings.TrimSpace(cfg.IndexRetryBackoff)
 	return cfg
 }
 
@@ -211,7 +221,8 @@ func applyZeroDefaults(cfg Config) Config {
 	if cfg.S3Region == "" {
 		cfg.S3Region = Default().S3Region
 	}
-	return applyRepairZeroDefaults(cfg)
+	cfg = applyRepairZeroDefaults(cfg)
+	return applyIndexZeroDefaults(cfg)
 }
 
 func applyRepairZeroDefaults(cfg Config) Config {
@@ -246,7 +257,7 @@ func validateDurations(cfg Config) error {
 	if cfg.RepairRateLimit < 0 {
 		return errors.New("invalid config: repair_rate_limit must be non-negative")
 	}
-	return nil
+	return validateIndexConfig(cfg)
 }
 
 func (cfg Config) RaftOperationTimeoutDuration() time.Duration {
@@ -255,37 +266,4 @@ func (cfg Config) RaftOperationTimeoutDuration() time.Duration {
 		return 5 * time.Second
 	}
 	return duration
-}
-
-func (cfg Config) StorageAdvertiseAddress() string {
-	if strings.TrimSpace(cfg.StorageAddress) != "" {
-		return strings.TrimSpace(cfg.StorageAddress)
-	}
-	return storageAddressFromHTTPAddress(cfg.HTTPAddress)
-}
-
-func (cfg Config) PendingObjectTTLDuration() time.Duration {
-	duration, err := time.ParseDuration(cfg.PendingObjectTTL)
-	if err != nil {
-		return time.Hour
-	}
-	return duration
-}
-
-func storageAddressFromHTTPAddress(address string) string {
-	address = strings.TrimSpace(address)
-	if address == "" || strings.Contains(address, "://") {
-		return address
-	}
-	host, port, err := net.SplitHostPort(address)
-	if err != nil {
-		if strings.HasPrefix(address, ":") {
-			return "127.0.0.1" + address
-		}
-		return address
-	}
-	if host == "" || host == "0.0.0.0" || host == "::" {
-		host = "127.0.0.1"
-	}
-	return net.JoinHostPort(host, port)
 }

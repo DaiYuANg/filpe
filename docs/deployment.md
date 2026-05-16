@@ -174,3 +174,17 @@ Metrics:
 ```sh
 curl -H "Authorization: Bearer $MAXIO_ADMIN_TOKEN" http://127.0.0.1:8080/metrics
 ```
+
+## Index operations
+
+Inspect index worker status:
+
+```sh
+curl -H "Authorization: Bearer $MAXIO_ADMIN_TOKEN" http://127.0.0.1:8080/_index/status
+```
+
+Rebuild the derived Bleve index from committed object metadata and object content:
+
+```sh
+curl -X POST -H "Authorization: Bearer $MAXIO_ADMIN_TOKEN" http://127.0.0.1:8080/_index/rebuild
+```

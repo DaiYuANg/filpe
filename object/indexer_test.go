@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lyonbrown4d/maxio/internal/config"
 	"github.com/lyonbrown4d/maxio/internal/index"
 	"github.com/lyonbrown4d/maxio/internal/metadata"
 	"github.com/lyonbrown4d/maxio/internal/model"
@@ -55,5 +56,5 @@ func newIndexTestService(t *testing.T) *object.Service {
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	return object.NewService(storage, index.NewInMemorySearchEngine(), nil, slog.New(slog.DiscardHandler))
+	return object.NewService(storage, index.NewInMemorySearchEngine(), nil, slog.New(slog.DiscardHandler), config.Config{})
 }
