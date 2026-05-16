@@ -12,6 +12,7 @@ import (
 
 type Membership struct {
 	ConfigChangeID uint64            `json:"config_change_id"`
+	LocalReplicaID uint64            `json:"local_replica_id"`
 	Nodes          map[uint64]string `json:"nodes"`
 	NonVotings     map[uint64]string `json:"non_votings"`
 	Witnesses      map[uint64]string `json:"witnesses"`
@@ -43,6 +44,7 @@ func (rt *Runtime) GetMembership(ctx context.Context) (Membership, error) {
 	}
 	return Membership{
 		ConfigChangeID: membership.ConfigChangeID,
+		LocalReplicaID: rt.cfg.replicaID,
 		Nodes:          maps.Clone(membership.Nodes),
 		NonVotings:     maps.Clone(membership.NonVotings),
 		Witnesses:      maps.Clone(membership.Witnesses),

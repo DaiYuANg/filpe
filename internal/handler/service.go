@@ -20,6 +20,8 @@ import (
 
 const defaultSearchPath = "/_search"
 const defaultClusterMembersPath = "/_cluster/members"
+const defaultClusterBootstrapPath = "/_cluster/bootstrap"
+const defaultClusterJoinPath = "/_cluster/join"
 const defaultDiscoveryPath = "/_cluster/discovery"
 
 type Service struct {
@@ -76,46 +78,12 @@ func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	s.handleObject(w, r, bucket, key)
 }
 
-func (s *Service) handleControlRoute(w http.ResponseWriter, r *http.Request, route string, parts []string) bool {
-	switch {
-	case isHealthRoute(route):
-		s.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-		return true
-	case s.handleS3Route(w, r):
-		return true
-	case route == strings.Trim(defaultSearchPath, "/"):
-		s.handleSearch(w, r)
-		return true
-	case s.handleStorageShardRoute(w, r, parts):
-		return true
-	case route == strings.Trim(defaultClusterMembersPath, "/"):
-		s.handleClusterMembers(w, r)
-		return true
-	case route == strings.Trim(defaultDiscoveryPath, "/"):
-		s.handleDiscovery(w, r)
-		return true
-	case isClusterMemberRoute(parts):
-		s.handleClusterMember(w, r, parts[2])
-		return true
-	default:
-		return false
-	}
-}
-
-func isHealthRoute(route string) bool {
-	return route == "healthz" || route == "health"
-}
-
 func (s *Service) handleS3Route(w http.ResponseWriter, r *http.Request) bool {
 	if s.s3 == nil || !s.s3.Match(r) {
 		return false
 	}
 	s.s3.ServeHTTP(w, r)
 	return true
-}
-
-func isClusterMemberRoute(parts []string) bool {
-	return len(parts) == 3 && parts[0] == "_cluster" && parts[1] == "members"
 }
 
 func (s *Service) handleBuckets(w http.ResponseWriter, r *http.Request) {

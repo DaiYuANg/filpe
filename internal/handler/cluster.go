@@ -14,6 +14,15 @@ type addReplicaRequest struct {
 	Target    string `json:"target"`
 }
 
+type joinReplicaRequest struct {
+	ReplicaID uint64 `json:"replica_id"`
+	Target    string `json:"target"`
+}
+
+type bootstrapClusterRequest struct {
+	Nodes map[uint64]string `json:"nodes"`
+}
+
 type syncReplicasRequest struct {
 	Nodes map[uint64]string `json:"nodes"`
 }
@@ -29,6 +38,73 @@ func (s *Service) handleClusterMembers(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Service) handleClusterBootstrap(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req bootstrapClusterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	result, err := s.raft.SyncReplicas(r.Context(), req.Nodes)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if err := s.syncStorageNodes(r.Context()); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Service) handleClusterJoin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req joinReplicaRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeError(w, err)
+		return
+	}
+
+	membership, err := s.raft.GetMembership(r.Context())
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if currentTarget, exists := membership.Nodes[req.ReplicaID]; exists {
+		if currentTarget == req.Target {
+			s.writeJSON(w, http.StatusOK, map[string]any{
+				"replica_id": req.ReplicaID,
+				"target":     req.Target,
+				"status":     "already_joined",
+			})
+			return
+		}
+		s.writeJSON(w, http.StatusConflict, map[string]string{
+			"error": fmt.Sprintf("raft replica %d already exists with different target", req.ReplicaID),
+		})
+		return
+	}
+	if err := s.raft.AddReplica(r.Context(), req.ReplicaID, req.Target); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if err := s.syncStorageNodes(r.Context()); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, http.StatusAccepted, map[string]any{
+		"replica_id": req.ReplicaID,
+		"target":     req.Target,
+		"status":     "joined",
+	})
 }
 
 func (s *Service) handleListClusterMembers(w http.ResponseWriter, r *http.Request) {
@@ -87,6 +163,23 @@ func (s *Service) handleClusterMember(w http.ResponseWriter, r *http.Request, re
 	id, err := strconv.ParseUint(replicaID, 10, 64)
 	if err != nil {
 		s.writeError(w, err)
+		return
+	}
+	membership, err := s.raft.GetMembership(r.Context())
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if id == membership.LocalReplicaID {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "cannot remove local replica",
+		})
+		return
+	}
+	if _, ok := membership.Nodes[id]; !ok {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{
+			"error": "replica not found",
+		})
 		return
 	}
 	if err := s.raft.RemoveReplica(r.Context(), id); err != nil {
