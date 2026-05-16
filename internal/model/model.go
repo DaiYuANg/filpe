@@ -21,16 +21,21 @@ type ShardPlacement struct {
 }
 
 type ObjectMeta struct {
-	Bucket          string           `json:"bucket"`
-	Key             string           `json:"key"`
-	Hash            string           `json:"hash"`
-	ETag            string           `json:"etag"`
-	Size            int64            `json:"size"`
-	ContentType     string           `json:"content_type"`
-	UpdatedAt       time.Time        `json:"updated_at"`
-	State           string           `json:"state,omitempty"`
-	ShardPlacements []ShardPlacement `json:"shard_placements,omitempty"`
-	ShardChecksums  []string         `json:"shard_checksums,omitempty"`
+	Bucket             string            `json:"bucket"`
+	Key                string            `json:"key"`
+	Hash               string            `json:"hash"`
+	ETag               string            `json:"etag"`
+	Size               int64             `json:"size"`
+	ContentType        string            `json:"content_type"`
+	CacheControl       string            `json:"cache_control,omitempty"`
+	ContentDisposition string            `json:"content_disposition,omitempty"`
+	ContentEncoding    string            `json:"content_encoding,omitempty"`
+	ContentLanguage    string            `json:"content_language,omitempty"`
+	UserMetadata       map[string]string `json:"user_metadata,omitempty"`
+	UpdatedAt          time.Time         `json:"updated_at"`
+	State              string            `json:"state,omitempty"`
+	ShardPlacements    []ShardPlacement  `json:"shard_placements,omitempty"`
+	ShardChecksums     []string          `json:"shard_checksums,omitempty"`
 }
 
 type SearchQuery struct {

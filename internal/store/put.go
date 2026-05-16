@@ -19,11 +19,12 @@ type existingObject struct {
 	refExists bool
 }
 
-func (s *Store) PutObject(ctx context.Context, bucket, key string, reader io.Reader, contentType string) (model.ObjectMeta, error) {
+func (s *Store) PutObject(ctx context.Context, bucket, key string, reader io.Reader, opts PutOptions) (model.ObjectMeta, error) {
 	bucket, key, err := normalizeObjectLocation(bucket, key)
 	if err != nil {
 		return model.ObjectMeta{}, err
 	}
+	opts = opts.normalized()
 	if ensureErr := s.ensureBucketExists(ctx, bucket); ensureErr != nil {
 		return model.ObjectMeta{}, ensureErr
 	}
@@ -38,18 +39,18 @@ func (s *Store) PutObject(ctx context.Context, bucket, key string, reader io.Rea
 	}
 	defer closeStagedObject(staged)
 
-	return s.putStagedObject(ctx, bucket, key, contentType, staged, existing)
+	return s.putStagedObject(ctx, bucket, key, opts, staged, existing)
 }
 
 func (s *Store) putStagedObject(
 	ctx context.Context,
 	bucket string,
 	key string,
-	contentType string,
+	opts PutOptions,
 	staged *stagedObject,
 	existing existingObject,
 ) (model.ObjectMeta, error) {
-	if err := s.stageObjectMeta(ctx, bucket, key, contentType, staged); err != nil {
+	if err := s.stageObjectMeta(ctx, bucket, key, opts, staged); err != nil {
 		return model.ObjectMeta{}, err
 	}
 
@@ -61,7 +62,7 @@ func (s *Store) putStagedObject(
 		return model.ObjectMeta{}, err
 	}
 
-	info, err := s.linkPutLayout(ctx, bucket, key, contentType, blob, createdBlob)
+	info, err := s.linkPutLayout(ctx, bucket, key, opts.ContentType, blob, createdBlob)
 	if err != nil {
 		return model.ObjectMeta{}, err
 	}
@@ -71,7 +72,7 @@ func (s *Store) putStagedObject(
 		return model.ObjectMeta{}, s.failPut(ctx, bucket, key, staged.hash, blob, blobRefUnchanged, createdBlob, existing, err)
 	}
 
-	meta := objectMetaFromInfo(info)
+	meta := opts.apply(objectMetaFromInfo(info))
 	if err := s.meta.UpsertObjectMeta(ctx, meta); err != nil {
 		wrapped := fmt.Errorf("upsert object metadata: %w", mapStoreError(err))
 		return model.ObjectMeta{}, s.failPut(ctx, bucket, key, staged.hash, blob, mutation, createdBlob, existing, wrapped)
@@ -87,17 +88,16 @@ func (s *Store) putStagedObject(
 	return meta, nil
 }
 
-func (s *Store) stageObjectMeta(ctx context.Context, bucket, key, contentType string, staged *stagedObject) error {
-	meta := model.ObjectMeta{
-		Bucket:      bucket,
-		Key:         key,
-		Hash:        staged.hash,
-		ETag:        engine.ETagFromHash(staged.hash),
-		Size:        staged.size,
-		ContentType: contentType,
-		UpdatedAt:   time.Now().UTC(),
-		State:       model.ObjectStatePending,
-	}
+func (s *Store) stageObjectMeta(ctx context.Context, bucket, key string, opts PutOptions, staged *stagedObject) error {
+	meta := opts.apply(model.ObjectMeta{
+		Bucket:    bucket,
+		Key:       key,
+		Hash:      staged.hash,
+		ETag:      engine.ETagFromHash(staged.hash),
+		Size:      staged.size,
+		UpdatedAt: time.Now().UTC(),
+		State:     model.ObjectStatePending,
+	})
 	if err := s.meta.StageObjectMeta(ctx, meta); err != nil {
 		return fmt.Errorf("stage object metadata: %w", mapStoreError(err))
 	}

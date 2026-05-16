@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/lyonbrown4d/maxio/internal/config"
+	"github.com/lyonbrown4d/maxio/object"
 	"github.com/spf13/afero"
 )
 
@@ -26,17 +27,22 @@ func newMultipartStore(cfg config.Config) *multipartStore {
 	return &multipartStore{root: filepath.Join(dataDir, multipartRootDir)}
 }
 
-func (m *multipartStore) initiate(ctx context.Context, bucket, key, contentType string) (multipartUpload, error) {
+func (m *multipartStore) initiate(ctx context.Context, bucket, key string, opts object.PutOptions) (multipartUpload, error) {
 	if err := contextError(ctx, "initiate multipart upload"); err != nil {
 		return multipartUpload{}, err
 	}
 	upload := multipartUpload{
-		UploadID:    newUploadID(),
-		Bucket:      strings.TrimSpace(bucket),
-		Key:         strings.TrimSpace(key),
-		ContentType: strings.TrimSpace(contentType),
-		CreatedAt:   time.Now().UTC(),
-		Parts:       make(map[int]multipartPart),
+		UploadID:           newUploadID(),
+		Bucket:             strings.TrimSpace(bucket),
+		Key:                strings.TrimSpace(key),
+		ContentType:        strings.TrimSpace(opts.ContentType),
+		CacheControl:       strings.TrimSpace(opts.CacheControl),
+		ContentDisposition: strings.TrimSpace(opts.ContentDisposition),
+		ContentEncoding:    strings.TrimSpace(opts.ContentEncoding),
+		ContentLanguage:    strings.TrimSpace(opts.ContentLanguage),
+		UserMetadata:       cloneMultipartUserMetadata(opts.UserMetadata),
+		CreatedAt:          time.Now().UTC(),
+		Parts:              make(map[int]multipartPart),
 	}
 	if upload.Bucket == "" || upload.Key == "" {
 		return multipartUpload{}, errInvalidPart

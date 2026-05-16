@@ -14,6 +14,17 @@ import (
 	"github.com/spf13/afero"
 )
 
+const (
+	defaultMaxMultipartParts = 1000
+	maxMultipartParts        = 1000
+	minMultipartPartSize     = 5 * 1024 * 1024
+)
+
+type listPartsOptions struct {
+	PartNumberMarker int
+	MaxParts         int
+}
+
 type multipartPartHasher struct {
 	sum *protocolMD5
 }
@@ -76,7 +87,22 @@ func completeParts(upload multipartUpload, requested []completeMultipartPart) ([
 		parts = append(parts, ensurePartDigest(part))
 		previous = item.PartNumber
 	}
+	if err := validateMultipartPartSizes(parts); err != nil {
+		return nil, err
+	}
 	return parts, nil
+}
+
+func validateMultipartPartSizes(parts []multipartPart) error {
+	if len(parts) < 2 {
+		return nil
+	}
+	for index := range len(parts) - 1 {
+		if parts[index].Size < minMultipartPartSize {
+			return errEntityTooSmall
+		}
+	}
+	return nil
 }
 
 func sortedMultipartParts(parts map[int]multipartPart) []multipartPart {
@@ -95,12 +121,68 @@ func sortedMultipartParts(parts map[int]multipartPart) []multipartPart {
 func decodeCompleteMultipartUpload(reader io.Reader) (completeMultipartUploadRequest, error) {
 	request := completeMultipartUploadRequest{}
 	if reader == nil {
-		return request, errInvalidPart
+		return request, errMalformedXML
 	}
 	if err := xml.NewDecoder(reader).Decode(&request); err != nil {
-		return request, fmt.Errorf("%w: decode complete multipart upload: %w", errInvalidPart, err)
+		return request, fmt.Errorf("%w: decode complete multipart upload: %w", errMalformedXML, err)
 	}
 	return request, nil
+}
+
+func listPartsOptionsFromQuery(query url.Values) (listPartsOptions, error) {
+	options := listPartsOptions{MaxParts: defaultMaxMultipartParts}
+	if marker := queryValue(query, "part-number-marker"); marker != "" {
+		value, err := strconv.Atoi(marker)
+		if err != nil || value < 0 {
+			return listPartsOptions{}, errInvalidPart
+		}
+		options.PartNumberMarker = value
+	}
+	if maxParts := queryValue(query, "max-parts"); maxParts != "" {
+		value, err := strconv.Atoi(maxParts)
+		if err != nil || value < 1 {
+			return listPartsOptions{}, errInvalidPart
+		}
+		if value > maxMultipartParts {
+			value = maxMultipartParts
+		}
+		options.MaxParts = value
+	}
+	return options, nil
+}
+
+func paginateMultipartParts(parts []multipartPart, options listPartsOptions) ([]multipartPart, int, bool) {
+	filtered := make([]multipartPart, 0, len(parts))
+	for _, part := range parts {
+		if part.Number <= options.PartNumberMarker {
+			continue
+		}
+		filtered = append(filtered, part)
+	}
+	if len(filtered) <= options.MaxParts {
+		return filtered, 0, false
+	}
+	page := filtered[:options.MaxParts]
+	return page, page[len(page)-1].Number, true
+}
+
+func cloneMultipartUserMetadata(input map[string]string) map[string]string {
+	if len(input) == 0 {
+		return nil
+	}
+	output := make(map[string]string, len(input))
+	for key, value := range input {
+		key = strings.ToLower(strings.TrimSpace(key))
+		value = strings.TrimSpace(value)
+		if key == "" || value == "" {
+			continue
+		}
+		output[key] = value
+	}
+	if len(output) == 0 {
+		return nil
+	}
+	return output
 }
 
 func parsePartNumber(query url.Values) (int, error) {

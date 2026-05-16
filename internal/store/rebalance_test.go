@@ -81,7 +81,9 @@ func TestStoreRebalanceNodeUpdatesObjectAndBlobRefPlacements(t *testing.T) {
 	mustNoError(t, err, "new store")
 	mustNoError(t, storeModule.CreateBucket(ctx, "bucket"), "create bucket")
 
-	objectMeta, err := storeModule.PutObject(ctx, "bucket", "object.txt", strings.NewReader("rebalance payload"), "text/plain")
+	objectMeta, err := storeModule.PutObject(ctx, "bucket", "object.txt", strings.NewReader("rebalance payload"), store.PutOptions{
+		ContentType: "text/plain",
+	})
 	mustNoError(t, err, "put object")
 	assertPlacementsUseNode(t, objectMeta.ShardPlacements, nodeA.id)
 	mustNoError(t, eng.DrainStorageNode(nodeA.id), "drain node a")

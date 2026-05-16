@@ -13,12 +13,17 @@ type multipartStore struct {
 }
 
 type multipartUpload struct {
-	UploadID    string                `json:"upload_id"`
-	Bucket      string                `json:"bucket"`
-	Key         string                `json:"key"`
-	ContentType string                `json:"content_type"`
-	CreatedAt   time.Time             `json:"created_at"`
-	Parts       map[int]multipartPart `json:"parts"`
+	UploadID           string                `json:"upload_id"`
+	Bucket             string                `json:"bucket"`
+	Key                string                `json:"key"`
+	ContentType        string                `json:"content_type"`
+	CacheControl       string                `json:"cache_control,omitempty"`
+	ContentDisposition string                `json:"content_disposition,omitempty"`
+	ContentEncoding    string                `json:"content_encoding,omitempty"`
+	ContentLanguage    string                `json:"content_language,omitempty"`
+	UserMetadata       map[string]string     `json:"user_metadata,omitempty"`
+	CreatedAt          time.Time             `json:"created_at"`
+	Parts              map[int]multipartPart `json:"parts"`
 }
 
 type multipartPart struct {
@@ -61,13 +66,16 @@ type completeMultipartUploadResult struct {
 }
 
 type listPartsResult struct {
-	XMLName     xml.Name         `xml:"ListPartsResult"`
-	XMLNS       string           `xml:"xmlns,attr,omitempty"`
-	Bucket      string           `xml:"Bucket"`
-	Key         string           `xml:"Key"`
-	UploadID    string           `xml:"UploadId"`
-	IsTruncated bool             `xml:"IsTruncated"`
-	Parts       []partItemResult `xml:"Part"`
+	XMLName              xml.Name         `xml:"ListPartsResult"`
+	XMLNS                string           `xml:"xmlns,attr,omitempty"`
+	Bucket               string           `xml:"Bucket"`
+	Key                  string           `xml:"Key"`
+	UploadID             string           `xml:"UploadId"`
+	PartNumberMarker     int              `xml:"PartNumberMarker"`
+	NextPartNumberMarker int              `xml:"NextPartNumberMarker,omitempty"`
+	MaxParts             int              `xml:"MaxParts"`
+	IsTruncated          bool             `xml:"IsTruncated"`
+	Parts                []partItemResult `xml:"Part"`
 }
 
 type partItemResult struct {
@@ -75,4 +83,24 @@ type partItemResult struct {
 	LastModified string `xml:"LastModified"`
 	ETag         string `xml:"ETag"`
 	Size         int64  `xml:"Size"`
+}
+
+type listMultipartUploadsResult struct {
+	XMLName            xml.Name                    `xml:"ListMultipartUploadsResult"`
+	XMLNS              string                      `xml:"xmlns,attr,omitempty"`
+	Bucket             string                      `xml:"Bucket"`
+	Prefix             string                      `xml:"Prefix,omitempty"`
+	KeyMarker          string                      `xml:"KeyMarker,omitempty"`
+	UploadIDMarker     string                      `xml:"UploadIdMarker,omitempty"`
+	NextKeyMarker      string                      `xml:"NextKeyMarker,omitempty"`
+	NextUploadIDMarker string                      `xml:"NextUploadIdMarker,omitempty"`
+	MaxUploads         int                         `xml:"MaxUploads"`
+	IsTruncated        bool                        `xml:"IsTruncated"`
+	Uploads            []multipartUploadItemResult `xml:"Upload"`
+}
+
+type multipartUploadItemResult struct {
+	Key       string `xml:"Key"`
+	UploadID  string `xml:"UploadId"`
+	Initiated string `xml:"Initiated"`
 }

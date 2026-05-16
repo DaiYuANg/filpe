@@ -58,6 +58,7 @@ func writeObjectHeaders(w http.ResponseWriter, meta object.ObjectMeta) {
 	if meta.ContentType != "" {
 		w.Header().Set("Content-Type", meta.ContentType)
 	}
+	writeObjectMetadataHeaders(w.Header(), meta)
 }
 
 func formatS3Time(value time.Time) string {

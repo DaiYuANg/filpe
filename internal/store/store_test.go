@@ -19,9 +19,13 @@ func TestStorePutObjectDedupePreservesBlobRefPlacements(t *testing.T) {
 
 	mustNoError(t, storeModule.CreateBucket(ctx, "bucket"), "create bucket")
 
-	first, err := storeModule.PutObject(ctx, "bucket", "first.txt", strings.NewReader("hello dedupe"), "text/plain")
+	first, err := storeModule.PutObject(ctx, "bucket", "first.txt", strings.NewReader("hello dedupe"), store.PutOptions{
+		ContentType: "text/plain",
+	})
 	mustNoError(t, err, "put first object")
-	second, err := storeModule.PutObject(ctx, "bucket", "second.txt", strings.NewReader("hello dedupe"), "text/plain")
+	second, err := storeModule.PutObject(ctx, "bucket", "second.txt", strings.NewReader("hello dedupe"), store.PutOptions{
+		ContentType: "text/plain",
+	})
 	mustNoError(t, err, "put second object")
 
 	mustEqual(t, first.Hash, second.Hash, "hashes must match")

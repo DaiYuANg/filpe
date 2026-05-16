@@ -25,24 +25,32 @@ type httpxBucketInput struct {
 }
 
 type httpxObjectInput struct {
-	Bucket      string `path:"bucket"`
-	Key         string `path:"key"`
-	ContentType string `header:"Content-Type"`
-	Range       string `header:"Range"`
-	Payload     httpx.RequestStream
+	Bucket             string `path:"bucket"`
+	Key                string `path:"key"`
+	ContentType        string `header:"Content-Type"`
+	CacheControl       string `header:"Cache-Control"`
+	ContentDisposition string `header:"Content-Disposition"`
+	ContentEncoding    string `header:"Content-Encoding"`
+	ContentLanguage    string `header:"Content-Language"`
+	Range              string `header:"Range"`
+	Payload            httpx.RequestStream
 }
 
 type httpxOutput struct {
-	Status        int    `status:"200"`
-	RequestID     string `header:"x-amz-request-id"`
-	ContentType   string `header:"Content-Type"`
-	ContentLength string `header:"Content-Length"`
-	ContentRange  string `header:"Content-Range"`
-	AcceptRanges  string `header:"Accept-Ranges"`
-	LastModified  string `header:"Last-Modified"`
-	ETag          string `header:"ETag"`
-	Location      string `header:"Location"`
-	Body          httpx.ResponseStream
+	Status             int    `status:"200"`
+	RequestID          string `header:"x-amz-request-id"`
+	ContentType        string `header:"Content-Type"`
+	ContentLength      string `header:"Content-Length"`
+	ContentRange       string `header:"Content-Range"`
+	AcceptRanges       string `header:"Accept-Ranges"`
+	LastModified       string `header:"Last-Modified"`
+	ETag               string `header:"ETag"`
+	Location           string `header:"Location"`
+	CacheControl       string `header:"Cache-Control"`
+	ContentDisposition string `header:"Content-Disposition"`
+	ContentEncoding    string `header:"Content-Encoding"`
+	ContentLanguage    string `header:"Content-Language"`
+	Body               httpx.ResponseStream
 }
 
 type Endpoint struct {
@@ -169,7 +177,11 @@ func (s *Service) getObjectHTTPX(ctx context.Context, input *httpxObjectInput) (
 
 func (s *Service) putObjectHTTPX(ctx context.Context, input *httpxObjectInput) (*httpxOutput, error) {
 	meta, err := s.objects.PutObject(ctx, input.Bucket, input.Key, input.Payload.Reader(), object.PutOptions{
-		ContentType: input.ContentType,
+		ContentType:        input.ContentType,
+		CacheControl:       input.CacheControl,
+		ContentDisposition: input.ContentDisposition,
+		ContentEncoding:    input.ContentEncoding,
+		ContentLanguage:    input.ContentLanguage,
 	})
 	if err != nil {
 		return s.mappedErrorHTTPX(err)
@@ -230,6 +242,10 @@ func (s *Service) objectHeadersHTTPX(status int, meta object.ObjectMeta) *httpxO
 	if meta.ContentType != "" {
 		out.ContentType = meta.ContentType
 	}
+	out.CacheControl = meta.CacheControl
+	out.ContentDisposition = meta.ContentDisposition
+	out.ContentEncoding = meta.ContentEncoding
+	out.ContentLanguage = meta.ContentLanguage
 	return out
 }
 

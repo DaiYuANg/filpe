@@ -14,6 +14,8 @@ var (
 	errInvalidUploadID  = errors.New("invalid multipart upload id")
 	errInvalidPart      = errors.New("invalid multipart part")
 	errInvalidPartOrder = errors.New("invalid multipart part order")
+	errMalformedXML     = errors.New("malformed xml")
+	errEntityTooSmall   = errors.New("multipart part is smaller than minimum allowed size")
 )
 
 func (s *Service) handleMultipartObject(w http.ResponseWriter, r *http.Request, bucket, key string) bool {
@@ -42,7 +44,7 @@ func (s *Service) handleMultipartObject(w http.ResponseWriter, r *http.Request, 
 }
 
 func (s *Service) handleInitiateMultipartUpload(w http.ResponseWriter, r *http.Request, bucket, key string) {
-	upload, err := s.multipart.initiate(r.Context(), bucket, key, r.Header.Get("Content-Type"))
+	upload, err := s.multipart.initiate(r.Context(), bucket, key, putOptionsFromHeaders(r.Header))
 	if err != nil {
 		s.writeMultipartError(w, err)
 		return
@@ -76,16 +78,25 @@ func (s *Service) handleListParts(w http.ResponseWriter, r *http.Request, upload
 		s.writeMultipartError(w, err)
 		return
 	}
-	parts := sortedMultipartParts(upload.Parts)
-	result := listPartsResult{
-		XMLNS:       defaultXMLNS,
-		Bucket:      upload.Bucket,
-		Key:         upload.Key,
-		UploadID:    upload.UploadID,
-		IsTruncated: false,
-		Parts:       make([]partItemResult, 0, len(parts)),
+	options, err := listPartsOptionsFromQuery(r.URL.Query())
+	if err != nil {
+		s.writeMultipartError(w, err)
+		return
 	}
-	for _, part := range parts {
+	parts := sortedMultipartParts(upload.Parts)
+	page, nextMarker, truncated := paginateMultipartParts(parts, options)
+	result := listPartsResult{
+		XMLNS:                defaultXMLNS,
+		Bucket:               upload.Bucket,
+		Key:                  upload.Key,
+		UploadID:             upload.UploadID,
+		PartNumberMarker:     options.PartNumberMarker,
+		NextPartNumberMarker: nextMarker,
+		MaxParts:             options.MaxParts,
+		IsTruncated:          truncated,
+		Parts:                make([]partItemResult, 0, len(page)),
+	}
+	for _, part := range page {
 		result.Parts = append(result.Parts, partItemResult{
 			PartNumber:   part.Number,
 			LastModified: formatS3Time(part.UploadedAt),
@@ -108,7 +119,12 @@ func (s *Service) handleCompleteMultipartUpload(w http.ResponseWriter, r *http.R
 		return
 	}
 	_, putErr := s.objects.PutObject(r.Context(), upload.Bucket, upload.Key, assembled.file, object.PutOptions{
-		ContentType: upload.ContentType,
+		ContentType:        upload.ContentType,
+		CacheControl:       upload.CacheControl,
+		ContentDisposition: upload.ContentDisposition,
+		ContentEncoding:    upload.ContentEncoding,
+		ContentLanguage:    upload.ContentLanguage,
+		UserMetadata:       upload.UserMetadata,
 	})
 	closeErr := assembled.close()
 	if putErr != nil {
@@ -148,6 +164,10 @@ func (s *Service) writeMultipartError(w http.ResponseWriter, err error) {
 		s.writeError(w, http.StatusBadRequest, "InvalidPart", err.Error())
 	case errors.Is(err, errInvalidPartOrder):
 		s.writeError(w, http.StatusBadRequest, "InvalidPartOrder", err.Error())
+	case errors.Is(err, errMalformedXML):
+		s.writeError(w, http.StatusBadRequest, "MalformedXML", err.Error())
+	case errors.Is(err, errEntityTooSmall):
+		s.writeError(w, http.StatusBadRequest, "EntityTooSmall", err.Error())
 	default:
 		s.writeError(w, http.StatusBadRequest, "InvalidArgument", err.Error())
 	}

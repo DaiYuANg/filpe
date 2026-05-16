@@ -32,9 +32,7 @@ type Health = engine.Health
 type RepairResult = engine.RepairResult
 type RebalanceResult = store.RebalanceResult
 
-type PutOptions struct {
-	ContentType string
-}
+type PutOptions = store.PutOptions
 
 type Service struct {
 	logger  *slog.Logger
@@ -97,7 +95,7 @@ func (s *Service) ListObjects(ctx context.Context, bucket, prefix string) ([]Obj
 }
 
 func (s *Service) PutObject(ctx context.Context, bucket, key string, reader io.Reader, opts PutOptions) (ObjectMeta, error) {
-	meta, err := s.store.PutObject(ctx, bucket, key, reader, opts.ContentType)
+	meta, err := s.store.PutObject(ctx, bucket, key, reader, opts)
 	if err != nil {
 		return ObjectMeta{}, fmt.Errorf("put object: %w", err)
 	}

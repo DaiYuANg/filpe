@@ -165,7 +165,11 @@ func (s *Service) handleHeadObject(w http.ResponseWriter, r *http.Request, bucke
 
 func (s *Service) handlePutObject(w http.ResponseWriter, r *http.Request, bucket, key string) {
 	meta, err := s.objects.PutObject(r.Context(), bucket, key, r.Body, object.PutOptions{
-		ContentType: r.Header.Get("Content-Type"),
+		ContentType:        r.Header.Get("Content-Type"),
+		CacheControl:       r.Header.Get("Cache-Control"),
+		ContentDisposition: r.Header.Get("Content-Disposition"),
+		ContentEncoding:    r.Header.Get("Content-Encoding"),
+		ContentLanguage:    r.Header.Get("Content-Language"),
 	})
 	if err != nil {
 		s.writeError(w, err)
@@ -258,4 +262,19 @@ func writeObjectHeaders(w http.ResponseWriter, meta object.ObjectMeta) {
 	w.Header().Set("Content-Type", contentTypeOrDefault(meta.ContentType))
 	w.Header().Set("Content-Length", formatInt(meta.Size))
 	w.Header().Set("Accept-Ranges", "bytes")
+	setObjectHeaderIfNotEmpty(w, "Cache-Control", meta.CacheControl)
+	setObjectHeaderIfNotEmpty(w, "Content-Disposition", meta.ContentDisposition)
+	setObjectHeaderIfNotEmpty(w, "Content-Encoding", meta.ContentEncoding)
+	setObjectHeaderIfNotEmpty(w, "Content-Language", meta.ContentLanguage)
+	for key, value := range meta.UserMetadata {
+		setObjectHeaderIfNotEmpty(w, "x-amz-meta-"+strings.ToLower(key), value)
+	}
+}
+
+func setObjectHeaderIfNotEmpty(w http.ResponseWriter, key, value string) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return
+	}
+	w.Header().Set(key, value)
 }

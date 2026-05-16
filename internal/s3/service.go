@@ -105,6 +105,10 @@ func (s *Service) handleBucket(w http.ResponseWriter, r *http.Request, bucket st
 	case http.MethodHead:
 		s.handleHeadBucket(w, r, bucket)
 	case http.MethodGet:
+		if hasQueryKey(r.URL.Query(), "uploads") {
+			s.handleListMultipartUploads(w, r, bucket)
+			return
+		}
 		s.handleListObjects(w, r, bucket)
 	case http.MethodPut:
 		s.handleCreateBucket(w, r, bucket)
@@ -188,9 +192,7 @@ func (s *Service) handleGetObject(w http.ResponseWriter, r *http.Request, bucket
 }
 
 func (s *Service) handlePutObject(w http.ResponseWriter, r *http.Request, bucket, key string) {
-	meta, err := s.objects.PutObject(r.Context(), bucket, key, r.Body, object.PutOptions{
-		ContentType: r.Header.Get("Content-Type"),
-	})
+	meta, err := s.objects.PutObject(r.Context(), bucket, key, r.Body, putOptionsFromHeaders(r.Header))
 	if err != nil {
 		s.writeMappedError(w, err)
 		return

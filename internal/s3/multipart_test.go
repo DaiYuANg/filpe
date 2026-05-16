@@ -43,7 +43,8 @@ func TestMultipartUploadCompletesObject(t *testing.T) {
 	ctx := context.Background()
 	service, objects := newMultipartTestService(t)
 	uploadID := initiateMultipartUpload(t, service, "/s3/bucket/object.txt?uploads")
-	partOneETag := uploadPart(t, service, "/s3/bucket/object.txt?partNumber=1&uploadId="+uploadID, "hello ")
+	firstPart := strings.Repeat("a", 5*1024*1024)
+	partOneETag := uploadPart(t, service, "/s3/bucket/object.txt?partNumber=1&uploadId="+uploadID, firstPart)
 	partTwoETag := uploadPart(t, service, "/s3/bucket/object.txt?partNumber=2&uploadId="+uploadID, "world")
 	result := completeMultipartUpload(t, service, "/s3/bucket/object.txt?uploadId="+uploadID, completeMultipartRequest{
 		Parts: []completeMultipartPart{
@@ -64,8 +65,8 @@ func TestMultipartUploadCompletesObject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read completed object: %v", err)
 	}
-	if string(data) != "hello world" {
-		t.Fatalf("object body = %q, want %q", data, "hello world")
+	if len(data) != len(firstPart)+len("world") || !strings.HasSuffix(string(data), "world") {
+		t.Fatalf("object body length = %d, want suffix world and length %d", len(data), len(firstPart)+len("world"))
 	}
 }
 
