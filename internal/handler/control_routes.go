@@ -10,6 +10,9 @@ func (s *Service) handleControlRoute(w http.ResponseWriter, r *http.Request, rou
 	case isHealthRoute(route):
 		s.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		return true
+	case isReadinessRoute(route):
+		s.handleReadiness(w, r)
+		return true
 	case s.handleS3Route(w, r):
 		return true
 	}
@@ -55,6 +58,10 @@ func (s *Service) handleNamedControlRoute(w http.ResponseWriter, r *http.Request
 
 func isHealthRoute(route string) bool {
 	return route == "healthz" || route == "health"
+}
+
+func isReadinessRoute(route string) bool {
+	return route == "readyz" || route == "ready"
 }
 
 func isClusterMemberRoute(parts []string) bool {
