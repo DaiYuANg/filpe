@@ -15,9 +15,13 @@ import (
 type httpxServiceInput struct{}
 
 type httpxBucketInput struct {
-	Bucket  string `path:"bucket"`
-	Prefix  string `query:"prefix"`
-	MaxKeys int    `query:"max-keys"`
+	Bucket            string `path:"bucket"`
+	Prefix            string `query:"prefix"`
+	MaxKeys           int    `query:"max-keys"`
+	ListType          string `query:"list-type"`
+	ContinuationToken string `query:"continuation-token"`
+	StartAfter        string `query:"start-after"`
+	Delimiter         string `query:"delimiter"`
 }
 
 type httpxObjectInput struct {
@@ -139,29 +143,9 @@ func (s *Service) deleteBucketHTTPX(ctx context.Context, input *httpxBucketInput
 }
 
 func (s *Service) listObjectsHTTPX(ctx context.Context, input *httpxBucketInput) (*httpxOutput, error) {
-	objects, err := s.objects.ListObjects(ctx, input.Bucket, input.Prefix)
+	result, err := s.listObjectsResult(ctx, input.Bucket, listObjectsOptionsFromHTTPX(input))
 	if err != nil {
 		return s.mappedErrorHTTPX(err)
-	}
-
-	result := listBucketResult{
-		XMLNS:       defaultXMLNS,
-		Name:        input.Bucket,
-		Prefix:      input.Prefix,
-		KeyCount:    len(objects),
-		MaxKeys:     normalizeHTTPXMaxKeys(input.MaxKeys),
-		IsTruncated: false,
-		Contents:    make([]objectResult, 0, len(objects)),
-	}
-	for i := range objects {
-		meta := objects[i]
-		result.Contents = append(result.Contents, objectResult{
-			Key:          meta.Key,
-			LastModified: formatS3Time(meta.UpdatedAt),
-			ETag:         meta.ETag,
-			Size:         meta.Size,
-			StorageClass: "STANDARD",
-		})
 	}
 	return s.xmlHTTPX(http.StatusOK, result)
 }

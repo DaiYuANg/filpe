@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"strconv"
 	"strings"
 )
 
@@ -56,16 +55,4 @@ func hasS3Header(header http.Header) bool {
 		}
 	}
 	return false
-}
-
-func maxKeys(query url.Values) int {
-	maxKeysValue := query.Get("max-keys")
-	if maxKeysValue == "" {
-		return 1000
-	}
-	value, err := strconv.Atoi(maxKeysValue)
-	if err != nil || value <= 0 {
-		return 1000
-	}
-	return value
 }

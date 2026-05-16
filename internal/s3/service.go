@@ -141,31 +141,10 @@ func (s *Service) handleDeleteBucket(w http.ResponseWriter, r *http.Request, buc
 }
 
 func (s *Service) handleListObjects(w http.ResponseWriter, r *http.Request, bucket string) {
-	prefix := r.URL.Query().Get("prefix")
-	objects, err := s.objects.ListObjects(r.Context(), bucket, prefix)
+	result, err := s.listObjectsResult(r.Context(), bucket, listObjectsOptionsFromQuery(r.URL.Query()))
 	if err != nil {
 		s.writeMappedError(w, err)
 		return
-	}
-
-	result := listBucketResult{
-		XMLNS:       defaultXMLNS,
-		Name:        bucket,
-		Prefix:      prefix,
-		KeyCount:    len(objects),
-		MaxKeys:     maxKeys(r.URL.Query()),
-		IsTruncated: false,
-		Contents:    make([]objectResult, 0, len(objects)),
-	}
-	for i := range objects {
-		meta := objects[i]
-		result.Contents = append(result.Contents, objectResult{
-			Key:          meta.Key,
-			LastModified: formatS3Time(meta.UpdatedAt),
-			ETag:         meta.ETag,
-			Size:         meta.Size,
-			StorageClass: "STANDARD",
-		})
 	}
 	s.writeXML(w, http.StatusOK, result)
 }

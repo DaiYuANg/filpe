@@ -40,6 +40,26 @@ type listBucketResult struct {
 	Contents    []objectResult `xml:"Contents"`
 }
 
+type commonPrefixResult struct {
+	Prefix string `xml:"Prefix"`
+}
+
+type listBucketV2Result struct {
+	XMLName               xml.Name             `xml:"ListBucketResult"`
+	XMLNS                 string               `xml:"xmlns,attr,omitempty"`
+	Name                  string               `xml:"Name"`
+	Prefix                string               `xml:"Prefix"`
+	Delimiter             string               `xml:"Delimiter,omitempty"`
+	KeyCount              int                  `xml:"KeyCount"`
+	MaxKeys               int                  `xml:"MaxKeys"`
+	IsTruncated           bool                 `xml:"IsTruncated"`
+	ContinuationToken     string               `xml:"ContinuationToken,omitempty"`
+	NextContinuationToken string               `xml:"NextContinuationToken,omitempty"`
+	StartAfter            string               `xml:"StartAfter,omitempty"`
+	Contents              []objectResult       `xml:"Contents"`
+	CommonPrefixes        []commonPrefixResult `xml:"CommonPrefixes"`
+}
+
 type errorResult struct {
 	XMLName   xml.Name `xml:"Error"`
 	Code      string   `xml:"Code"`
