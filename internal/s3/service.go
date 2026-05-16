@@ -16,9 +16,10 @@ const (
 )
 
 type Service struct {
-	objects *object.Service
-	logger  *slog.Logger
-	cfg     config.Config
+	objects   *object.Service
+	logger    *slog.Logger
+	cfg       config.Config
+	multipart *multipartStore
 }
 
 func NewService(objects *object.Service, logger *slog.Logger, cfg config.Config) *Service {
@@ -26,9 +27,10 @@ func NewService(objects *object.Service, logger *slog.Logger, cfg config.Config)
 		logger = slog.Default()
 	}
 	return &Service{
-		objects: objects,
-		logger:  logger,
-		cfg:     cfg,
+		objects:   objects,
+		logger:    logger,
+		cfg:       cfg,
+		multipart: newMultipartStore(cfg),
 	}
 }
 
@@ -169,6 +171,10 @@ func (s *Service) handleListObjects(w http.ResponseWriter, r *http.Request, buck
 }
 
 func (s *Service) handleObject(w http.ResponseWriter, r *http.Request, bucket, key string) {
+	if s.handleMultipartObject(w, r, bucket, key) {
+		return
+	}
+
 	switch r.Method {
 	case http.MethodHead:
 		s.handleHeadObject(w, r, bucket, key)

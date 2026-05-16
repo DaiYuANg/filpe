@@ -53,6 +53,8 @@ The admin token is also accepted for bucket and object routes.
 
 If both S3 key fields are empty, S3-compatible APIs run without authentication for local development. If either S3 key field is configured, both must be configured and S3 clients must send `Authorization: AWS4-HMAC-SHA256 ...` plus `X-Amz-Date`, or use standard presigned URL query parameters.
 
+S3 multipart upload is supported through the compatibility path. In-progress upload state is staged under `data_dir/s3-multipart` and completed objects are committed through the normal MaxIO object write path.
+
 `/healthz` and `/readyz` remain unauthenticated for load balancers.
 
 ## TLS termination
