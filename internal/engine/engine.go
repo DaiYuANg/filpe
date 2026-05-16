@@ -35,6 +35,7 @@ type Engine struct {
 	layoutCache  sync.Map // string -> *Layout
 	nodes        map[string]StorageNode
 	drainedNodes map[string]struct{}
+	controlToken string
 	localNodeID  string
 	planner      PlacementPlanner
 }

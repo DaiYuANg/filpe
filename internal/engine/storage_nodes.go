@@ -37,7 +37,7 @@ func (e *Engine) SyncStorageNodesFromRaft(localReplicaID uint64, raftNodes map[u
 	drainedNodes := e.drainedNodeIDsLocked()
 	localNodeID := raftStorageNodeID(localReplicaID)
 	localNodeAddress := e.localNodeAddress(localNodeID)
-	nextNodes, nextLocalNodeAddress, err := syncRaftStorageNodes(localReplicaID, raftNodes)
+	nextNodes, nextLocalNodeAddress, err := syncRaftStorageNodes(localReplicaID, raftNodes, e.controlToken)
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,11 @@ func (e *Engine) DeleteLocalShard(ctx context.Context, shardDir, hash string, in
 	return nil
 }
 
-func syncRaftStorageNodes(localReplicaID uint64, raftNodes map[uint64]string) (map[string]StorageNode, string, error) {
+func syncRaftStorageNodes(
+	localReplicaID uint64,
+	raftNodes map[uint64]string,
+	controlToken string,
+) (map[string]StorageNode, string, error) {
 	nodes := make(map[string]StorageNode, len(raftNodes))
 	localNodeAddress := ""
 	for replicaID, target := range raftNodes {
@@ -146,6 +150,7 @@ func syncRaftStorageNodes(localReplicaID uint64, raftNodes map[uint64]string) (m
 		if err != nil {
 			return nil, "", fmt.Errorf("build remote storage node for replica %d: %w", replicaID, err)
 		}
+		remote.controlToken = strings.TrimSpace(controlToken)
 		nodes[raftStorageNodeID(replicaID)] = remote
 		if replicaID == localReplicaID {
 			localNodeAddress = strings.TrimSpace(target)

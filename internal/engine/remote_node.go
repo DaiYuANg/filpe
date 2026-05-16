@@ -18,10 +18,11 @@ const (
 )
 
 type remoteStorageNode struct {
-	id      string
-	address string
-	baseURL string
-	client  *http.Client
+	id           string
+	address      string
+	baseURL      string
+	controlToken string
+	client       *http.Client
 }
 
 func newRemoteStorageNode(id, address string, client *http.Client) (*remoteStorageNode, error) {
@@ -75,6 +76,7 @@ func (node *remoteStorageNode) WriteShard(ctx context.Context, shardDir, hash st
 	if err != nil {
 		return fmt.Errorf("build remote shard write request: %w", err)
 	}
+	node.authorizeRequest(req)
 	resp, err := node.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("send remote shard write request: %w", err)
@@ -100,6 +102,7 @@ func (node *remoteStorageNode) ReadShard(ctx context.Context, shardDir, hash str
 	if err != nil {
 		return nil, fmt.Errorf("build remote shard read request: %w", err)
 	}
+	node.authorizeRequest(req)
 	resp, err := node.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("send remote shard read request: %w", err)
@@ -129,6 +132,7 @@ func (node *remoteStorageNode) ShardExists(ctx context.Context, shardDir, hash s
 	if err != nil {
 		return false
 	}
+	node.authorizeRequest(req)
 	resp, err := node.client.Do(req)
 	if err != nil {
 		return false
@@ -147,6 +151,7 @@ func (node *remoteStorageNode) DeleteShard(ctx context.Context, shardDir, hash s
 	if err != nil {
 		return fmt.Errorf("build remote shard delete request: %w", err)
 	}
+	node.authorizeRequest(req)
 	resp, err := node.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("send remote shard delete request: %w", err)
@@ -162,6 +167,13 @@ func (node *remoteStorageNode) DeleteShard(ctx context.Context, shardDir, hash s
 		return fmt.Errorf("remote shard delete request failed: %w", err)
 	}
 	return fmt.Errorf("remote shard delete request failed: status=%d body=%q", resp.StatusCode, strings.TrimSpace(string(responseBody)))
+}
+
+func (node *remoteStorageNode) authorizeRequest(req *http.Request) {
+	if node == nil || req == nil || strings.TrimSpace(node.controlToken) == "" {
+		return
+	}
+	req.Header.Set("X-Maxio-Control", strings.TrimSpace(node.controlToken))
 }
 
 func (node *remoteStorageNode) shardURL(shardDir, hash string, index int) string {

@@ -20,8 +20,9 @@ import (
 )
 
 type testShardHTTPStorage struct {
-	mu     sync.RWMutex
-	shards map[string][]byte
+	controlValue string
+	mu           sync.RWMutex
+	shards       map[string][]byte
 }
 
 func newTestShardHTTPStorage() *testShardHTTPStorage {
@@ -31,6 +32,10 @@ func newTestShardHTTPStorage() *testShardHTTPStorage {
 }
 
 func (s *testShardHTTPStorage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.controlValue != "" && r.Header.Get("X-Maxio-Control") != s.controlValue {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	shardDir, hash, index, err := parseShardRequestPath(r.URL.Path)
 	if err != nil {
 		http.NotFound(w, r)
@@ -185,12 +190,36 @@ func TestRemoteStorageNodeReadMissingReturnsErrNotExist(t *testing.T) {
 	}
 }
 
+func TestRemoteStorageNodeSendsControlHeaderViaHTTP(t *testing.T) {
+	ctx := context.Background()
+	storage := newTestShardHTTPStorage()
+	storage.controlValue = "control-secret"
+	server := httptest.NewServer(storage)
+	defer server.Close()
+
+	e := newTestEngineForRemoteWithToken(t, server.URL, storage.controlValue)
+	node, err := e.StorageNode("raft-2")
+	if err != nil {
+		t.Fatalf("StorageNode: %v", err)
+	}
+
+	if err := node.WriteShard(ctx, "ab", "hash-auth", 1, []byte("payload")); err != nil {
+		t.Fatalf("write remote shard with control header: %v", err)
+	}
+}
+
 func newTestEngineForRemote(t *testing.T, remoteAddress string) *engine.Engine {
+	t.Helper()
+	return newTestEngineForRemoteWithToken(t, remoteAddress, "")
+}
+
+func newTestEngineForRemoteWithToken(t *testing.T, remoteAddress, controlValue string) *engine.Engine {
 	t.Helper()
 	e, err := engine.NewEngine(t.TempDir(), engine.DefaultDataChunks, engine.DefaultParityChunks, afero.NewMemMapFs())
 	if err != nil {
 		t.Fatalf("create test engine: %v", err)
 	}
+	e.SetControlToken(controlValue)
 	if err := e.SyncStorageNodesFromRaft(1, map[uint64]string{
 		1: "127.0.0.1:9000",
 		2: remoteAddress,
