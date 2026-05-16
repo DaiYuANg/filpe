@@ -24,12 +24,14 @@ type multipartUpload struct {
 type multipartPart struct {
 	Number     int       `json:"number"`
 	ETag       string    `json:"etag"`
+	Digest     string    `json:"digest"`
 	Size       int64     `json:"size"`
 	UploadedAt time.Time `json:"uploaded_at"`
 }
 
 type assembledMultipart struct {
 	file *os.File
+	etag string
 }
 
 type initiateMultipartUploadResult struct {

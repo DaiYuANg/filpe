@@ -23,6 +23,10 @@ type initiateMultipartResult struct {
 	UploadID string `xml:"UploadId"`
 }
 
+type completeMultipartResult struct {
+	ETag string `xml:"ETag"`
+}
+
 type completeMultipartRequest struct {
 	XMLName xml.Name                `xml:"CompleteMultipartUpload"`
 	Parts   []completeMultipartPart `xml:"Part"`
@@ -41,12 +45,15 @@ func TestMultipartUploadCompletesObject(t *testing.T) {
 	uploadID := initiateMultipartUpload(t, service, "/s3/bucket/object.txt?uploads")
 	partOneETag := uploadPart(t, service, "/s3/bucket/object.txt?partNumber=1&uploadId="+uploadID, "hello ")
 	partTwoETag := uploadPart(t, service, "/s3/bucket/object.txt?partNumber=2&uploadId="+uploadID, "world")
-	completeMultipartUpload(t, service, "/s3/bucket/object.txt?uploadId="+uploadID, completeMultipartRequest{
+	result := completeMultipartUpload(t, service, "/s3/bucket/object.txt?uploadId="+uploadID, completeMultipartRequest{
 		Parts: []completeMultipartPart{
 			{PartNumber: 1, ETag: partOneETag},
 			{PartNumber: 2, ETag: partTwoETag},
 		},
 	})
+	if !strings.Contains(result.ETag, "-2") {
+		t.Fatalf("complete etag = %q, want multipart suffix", result.ETag)
+	}
 
 	body, _, err := objects.GetObject(ctx, "bucket", "object.txt")
 	if err != nil {
@@ -131,7 +138,7 @@ func completeMultipartUpload(
 	service *maxios3.Service,
 	target string,
 	request completeMultipartRequest,
-) {
+) completeMultipartResult {
 	t.Helper()
 
 	var body bytes.Buffer
@@ -142,6 +149,11 @@ func completeMultipartUpload(
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("complete status = %d body = %s", recorder.Code, recorder.Body.String())
 	}
+	result := completeMultipartResult{}
+	if err := xml.NewDecoder(recorder.Body).Decode(&result); err != nil {
+		t.Fatalf("decode complete result: %v", err)
+	}
+	return result
 }
 
 func serveS3Request(

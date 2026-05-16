@@ -3,7 +3,6 @@ package s3
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -193,7 +192,7 @@ func (m *multipartStore) writePartLocked(uploadID string, partNumber int, reader
 	if err != nil {
 		return multipartPart{}, fmt.Errorf("create multipart part: %w", err)
 	}
-	hasher := sha256.New()
+	hasher := newMultipartPartHasher()
 	size, copyErr := io.Copy(io.MultiWriter(tempFile, hasher), reader)
 	closeErr := tempFile.Close()
 	if copyErr != nil {
@@ -207,7 +206,8 @@ func (m *multipartStore) writePartLocked(uploadID string, partNumber int, reader
 	}
 	return multipartPart{
 		Number:     partNumber,
-		ETag:       quoteETag(hex.EncodeToString(hasher.Sum(nil))),
+		ETag:       quoteETag(hasher.ETag()),
+		Digest:     hasher.Digest(),
 		Size:       size,
 		UploadedAt: time.Now().UTC(),
 	}, nil
@@ -226,7 +226,7 @@ func (m *multipartStore) assembleLocked(uploadID string, parts []multipartPart) 
 	if _, err := output.Seek(0, io.SeekStart); err != nil {
 		return assembledMultipart{}, closeAssembleOnError(output, fmt.Errorf("seek multipart assembly: %w", err))
 	}
-	return assembledMultipart{file: output}, nil
+	return assembledMultipart{file: output, etag: multipartCompleteETag(parts)}, nil
 }
 
 func copyPartFile(output io.Writer, sourcePath string) error {

@@ -107,7 +107,7 @@ func (s *Service) handleCompleteMultipartUpload(w http.ResponseWriter, r *http.R
 		s.writeMultipartError(w, err)
 		return
 	}
-	meta, putErr := s.objects.PutObject(r.Context(), upload.Bucket, upload.Key, assembled.file, object.PutOptions{
+	_, putErr := s.objects.PutObject(r.Context(), upload.Bucket, upload.Key, assembled.file, object.PutOptions{
 		ContentType: upload.ContentType,
 	})
 	closeErr := assembled.close()
@@ -128,7 +128,7 @@ func (s *Service) handleCompleteMultipartUpload(w http.ResponseWriter, r *http.R
 		Location: "/" + upload.Bucket + "/" + upload.Key,
 		Bucket:   upload.Bucket,
 		Key:      upload.Key,
-		ETag:     meta.ETag,
+		ETag:     assembled.etag,
 	})
 }
 

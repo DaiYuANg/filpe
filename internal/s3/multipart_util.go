@@ -2,6 +2,7 @@ package s3
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -12,6 +13,51 @@ import (
 
 	"github.com/spf13/afero"
 )
+
+type multipartPartHasher struct {
+	sum *protocolMD5
+}
+
+func newMultipartPartHasher() *multipartPartHasher {
+	return &multipartPartHasher{sum: newProtocolMD5()}
+}
+
+func (h *multipartPartHasher) Write(data []byte) (int, error) {
+	return h.sum.Write(data)
+}
+
+func (h *multipartPartHasher) ETag() string {
+	sum := h.sum.Sum()
+	return hex.EncodeToString(sum[:])
+}
+
+func (h *multipartPartHasher) Digest() string {
+	return h.ETag()
+}
+
+func multipartCompleteETag(parts []multipartPart) string {
+	digests := make([]byte, 0, len(parts)*protocolMD5Size)
+	for _, part := range parts {
+		digest, err := hex.DecodeString(strings.Trim(part.Digest, `"`))
+		if err != nil || len(digest) != protocolMD5Size {
+			return fallbackMultipartETag(parts)
+		}
+		digests = append(digests, digest...)
+	}
+	sum := protocolMD5Sum(digests)
+	return quoteETag(hex.EncodeToString(sum[:]) + "-" + strconv.Itoa(len(parts)))
+}
+
+func fallbackMultipartETag(parts []multipartPart) string {
+	hasher := newProtocolMD5()
+	for _, part := range parts {
+		if _, err := hasher.Write([]byte(part.ETag)); err != nil {
+			return quoteETag(strconv.Itoa(len(parts)))
+		}
+	}
+	sum := hasher.Sum()
+	return quoteETag(hex.EncodeToString(sum[:]) + "-" + strconv.Itoa(len(parts)))
+}
 
 func completeParts(upload multipartUpload, requested []completeMultipartPart) ([]multipartPart, error) {
 	if len(requested) == 0 {
@@ -27,7 +73,7 @@ func completeParts(upload multipartUpload, requested []completeMultipartPart) ([
 		if !ok || !etagMatches(part.ETag, item.ETag) {
 			return nil, errInvalidPart
 		}
-		parts = append(parts, part)
+		parts = append(parts, ensurePartDigest(part))
 		previous = item.PartNumber
 	}
 	return parts, nil
@@ -117,6 +163,13 @@ func etagMatches(stored, requested string) bool {
 		return true
 	}
 	return strings.Trim(stored, `"`) == strings.Trim(requested, `"`)
+}
+
+func ensurePartDigest(part multipartPart) multipartPart {
+	if strings.TrimSpace(part.Digest) == "" {
+		part.Digest = strings.Trim(part.ETag, `"`)
+	}
+	return part
 }
 
 func (a assembledMultipart) close() error {
