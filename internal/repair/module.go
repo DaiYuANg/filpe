@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/arcgolabs/dix"
 	gocron "github.com/go-co-op/gocron/v2"
@@ -18,15 +19,17 @@ const repairJobName = "maxio.object.repair"
 
 // Summary reports one repair scan result.
 type Summary struct {
-	Buckets         int
-	Objects         int
-	Unhealthy       int
-	RepairAttempts  int
-	RepairedObjects int
-	RepairedShards  int
-	Unrecoverable   int
-	Failed          int
-	Limited         bool
+	Buckets         int  `json:"buckets"`
+	Objects         int  `json:"objects"`
+	Unhealthy       int  `json:"unhealthy"`
+	Missing         int  `json:"missing"`
+	Corrupted       int  `json:"corrupted"`
+	RepairAttempts  int  `json:"repair_attempts"`
+	RepairedObjects int  `json:"repaired_objects"`
+	RepairedShards  int  `json:"repaired_shards"`
+	Unrecoverable   int  `json:"unrecoverable"`
+	Failed          int  `json:"failed"`
+	Limited         bool `json:"limited"`
 }
 
 // Runtime owns the scheduled repair job.
@@ -35,6 +38,8 @@ type Runtime struct {
 	objects   *object.Service
 	scheduler *scheduler.Runtime
 	logger    *slog.Logger
+	mu        sync.RWMutex
+	status    Status
 }
 
 func Module() dix.Module {
@@ -129,6 +134,8 @@ func summaryAttrs(summary Summary) []any {
 		"buckets", summary.Buckets,
 		"objects", summary.Objects,
 		"unhealthy", summary.Unhealthy,
+		"missing", summary.Missing,
+		"corrupted", summary.Corrupted,
 		"repair_attempts", summary.RepairAttempts,
 		"repaired_objects", summary.RepairedObjects,
 		"repaired_shards", summary.RepairedShards,
@@ -139,6 +146,18 @@ func summaryAttrs(summary Summary) []any {
 }
 
 func (runtime *Runtime) RunOnce(ctx context.Context) (Summary, error) {
+	if runtime == nil {
+		return Summary{}, errors.New("repair runtime unavailable")
+	}
+	runtime.markStarted()
+
+	summary, err := runtime.runOnce(ctx)
+	runtime.markFinished(summary, err)
+
+	return summary, err
+}
+
+func (runtime *Runtime) runOnce(ctx context.Context) (Summary, error) {
 	if runtime == nil || runtime.objects == nil {
 		return Summary{}, errors.New("repair runtime unavailable")
 	}
@@ -195,9 +214,11 @@ func repairObject(ctx context.Context, runtime *Runtime, meta *object.ObjectMeta
 		runtime.logger.WarnContext(ctx, "check object health failed", "bucket", meta.Bucket, "key", meta.Key, "error", err)
 		return nil
 	}
-	if health.Missing == 0 {
+	if health.Missing == 0 && health.Corrupted == 0 {
 		return nil
 	}
+	summary.Missing += health.Missing
+	summary.Corrupted += health.Corrupted
 	summary.Unhealthy++
 	if !health.Recoverable {
 		summary.Unrecoverable++
@@ -205,6 +226,7 @@ func repairObject(ctx context.Context, runtime *Runtime, meta *object.ObjectMeta
 			"bucket", meta.Bucket,
 			"key", meta.Key,
 			"missing", health.Missing,
+			"corrupted", health.Corrupted,
 			"available", health.Available,
 			"total_chunks", health.TotalChunks,
 		)
