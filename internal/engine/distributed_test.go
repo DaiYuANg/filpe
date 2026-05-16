@@ -78,6 +78,16 @@ func (node *inMemoryStorageNode) ShardExists(_ context.Context, shardDir, hash s
 	return ok
 }
 
+func (node *inMemoryStorageNode) DeleteShard(_ context.Context, shardDir, hash string, index int) error {
+	if node == nil {
+		return errors.New("storage node is required")
+	}
+	node.mu.Lock()
+	defer node.mu.Unlock()
+	delete(node.shards, node.ShardKey(shardDir, hash, index))
+	return nil
+}
+
 func (node *inMemoryStorageNode) ShardCount() int {
 	if node == nil {
 		return 0

@@ -44,6 +44,8 @@ func (s *testShardHTTPStorage) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		s.handleRead(w, r, shardDir, hash, index)
 	case http.MethodHead:
 		s.handleHead(w, r, shardDir, hash, index)
+	case http.MethodDelete:
+		s.handleDelete(w, r, shardDir, hash, index)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -114,6 +116,13 @@ func (s *testShardHTTPStorage) handleHead(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 }
 
+func (s *testShardHTTPStorage) handleDelete(w http.ResponseWriter, _ *http.Request, shardDir, hash string, index int) {
+	s.mu.Lock()
+	delete(s.shards, shardKey(shardDir, hash, index))
+	s.mu.Unlock()
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func shardKey(shardDir, hash string, index int) string {
 	return shardDir + "|" + hash + "|" + strconv.Itoa(index)
 }
@@ -146,6 +155,12 @@ func TestRemoteStorageNodeWritesAndReadsShardsViaHTTP(t *testing.T) {
 	}
 	if !bytes.Equal(got, data) {
 		t.Fatalf("read shard = %q, want %q", got, data)
+	}
+	if deleteErr := node.DeleteShard(ctx, "ab", "hash-1", 3); deleteErr != nil {
+		t.Fatalf("delete remote shard: %v", deleteErr)
+	}
+	if exists := node.ShardExists(ctx, "ab", "hash-1", 3); exists {
+		t.Fatal("expected remote shard deleted")
 	}
 }
 

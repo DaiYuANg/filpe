@@ -119,6 +119,14 @@ func (b *shardBackend) ShardExists(shardDir, hash string, index int) bool {
 	return err == nil
 }
 
+func (b *shardBackend) DeleteShard(shardDir, hash string, index int) error {
+	path := b.shardPath(shardDir, hash, index)
+	if err := b.fs.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("engine: delete shard: %w", err)
+	}
+	return nil
+}
+
 // ReadMeta reads shard set metadata from disk.
 func (b *shardBackend) ReadMeta(shardDir, hash string) ([]byte, error) {
 	path := b.metaPath(shardDir, hash)

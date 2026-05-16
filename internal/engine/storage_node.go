@@ -15,6 +15,7 @@ type StorageNode interface {
 	WriteShard(ctx context.Context, shardDir, hash string, index int, data []byte) error
 	ReadShard(ctx context.Context, shardDir, hash string, index int) ([]byte, error)
 	ShardExists(ctx context.Context, shardDir, hash string, index int) bool
+	DeleteShard(ctx context.Context, shardDir, hash string, index int) error
 }
 
 type LocalStorageNode struct {
@@ -88,6 +89,19 @@ func (node *LocalStorageNode) ShardExists(ctx context.Context, shardDir, hash st
 		return false
 	}
 	return node.store.ShardExists(shardDir, hash, index)
+}
+
+func (node *LocalStorageNode) DeleteShard(ctx context.Context, shardDir, hash string, index int) error {
+	if err := contextError(ctx, "delete local shard"); err != nil {
+		return err
+	}
+	if node == nil || node.store == nil {
+		return errors.New("local storage node store is required")
+	}
+	if err := node.store.DeleteShard(shardDir, hash, index); err != nil {
+		return fmt.Errorf("delete local shard: %w", err)
+	}
+	return nil
 }
 
 func raftStorageNodeID(replicaID uint64) string {

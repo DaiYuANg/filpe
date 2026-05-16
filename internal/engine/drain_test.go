@@ -84,6 +84,11 @@ func TestRebalanceObjectFromNodeMovesDrainedPlacements(t *testing.T) {
 	if len(result.Moved) == 0 {
 		t.Fatal("expected moved shards")
 	}
+	for _, move := range result.Moved {
+		if nodeA.ShardExists(ctx, result.Object.ShardDir, result.Object.Hash, move.Index) {
+			t.Fatalf("expected old shard %d deleted from drained node", move.Index)
+		}
+	}
 	assertPlacementExcludesNode(t, result.Object.ShardPlacements, nodeA.id)
 	assertPlacementIncludesNode(t, result.Object.ShardPlacements, nodeB.id)
 }

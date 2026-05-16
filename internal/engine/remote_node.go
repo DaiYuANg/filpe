@@ -139,6 +139,31 @@ func (node *remoteStorageNode) ShardExists(ctx context.Context, shardDir, hash s
 	return resp.StatusCode == http.StatusOK
 }
 
+func (node *remoteStorageNode) DeleteShard(ctx context.Context, shardDir, hash string, index int) error {
+	if err := contextError(ctx, "delete remote shard"); err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, node.shardURL(shardDir, hash, index), http.NoBody)
+	if err != nil {
+		return fmt.Errorf("build remote shard delete request: %w", err)
+	}
+	resp, err := node.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("send remote shard delete request: %w", err)
+	}
+	if resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotFound {
+		if closeErr := closeResponseBody(resp); closeErr != nil {
+			return fmt.Errorf("close remote shard delete response: %w", closeErr)
+		}
+		return nil
+	}
+	responseBody, err := readAndCloseResponseBody(resp)
+	if err != nil {
+		return fmt.Errorf("remote shard delete request failed: %w", err)
+	}
+	return fmt.Errorf("remote shard delete request failed: status=%d body=%q", resp.StatusCode, strings.TrimSpace(string(responseBody)))
+}
+
 func (node *remoteStorageNode) shardURL(shardDir, hash string, index int) string {
 	return strings.TrimRight(node.baseURL, "/") + internalStorageShardsPath + "/" +
 		url.PathEscape(shardDir) + "/" +

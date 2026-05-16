@@ -45,6 +45,8 @@ func (s *Service) handleStorageShard(w http.ResponseWriter, r *http.Request, raw
 		s.handleStorageShardGet(w, r, shardDir, hash, index)
 	case http.MethodHead:
 		s.handleStorageShardHead(w, r, shardDir, hash, index)
+	case http.MethodDelete:
+		s.handleStorageShardDelete(w, r, shardDir, hash, index)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -102,4 +104,12 @@ func (s *Service) handleStorageShardHead(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Service) handleStorageShardDelete(w http.ResponseWriter, r *http.Request, shardDir, hash string, index int) {
+	if err := s.engine.DeleteLocalShard(r.Context(), shardDir, hash, index); err != nil {
+		s.writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -57,6 +57,13 @@ func (node *memoryStorageNode) ShardExists(_ context.Context, shardDir, hash str
 	return ok
 }
 
+func (node *memoryStorageNode) DeleteShard(_ context.Context, shardDir, hash string, index int) error {
+	node.mu.Lock()
+	defer node.mu.Unlock()
+	delete(node.shards, node.shardKey(shardDir, hash, index))
+	return nil
+}
+
 func (node *memoryStorageNode) shardKey(shardDir, hash string, index int) string {
 	return fmt.Sprintf("%s/%s/%d", shardDir, hash, index)
 }

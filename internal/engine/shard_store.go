@@ -7,6 +7,7 @@ type ShardStore interface {
 	WriteMeta(shardDir, layoutID string, data []byte) error
 	ReadShard(shardDir, hash string, index int) ([]byte, error)
 	ShardExists(shardDir, hash string, index int) bool
+	DeleteShard(shardDir, hash string, index int) error
 	ReadMeta(shardDir, layoutID string) ([]byte, error)
 	DeleteShardSet(shardDir, hash string) error
 	DeleteMeta(shardDir, layoutID string) error

@@ -116,6 +116,17 @@ func (e *Engine) LocalShardExists(ctx context.Context, shardDir, hash string, in
 	return node.ShardExists(ctx, shardDir, hash, index)
 }
 
+func (e *Engine) DeleteLocalShard(ctx context.Context, shardDir, hash string, index int) error {
+	node, err := e.LocalStorageNode()
+	if err != nil {
+		return err
+	}
+	if err := node.DeleteShard(ctx, shardDir, hash, index); err != nil {
+		return fmt.Errorf("delete local shard from node %q: %w", node.ID(), err)
+	}
+	return nil
+}
+
 func syncRaftStorageNodes(localReplicaID uint64, raftNodes map[uint64]string) (map[string]StorageNode, string, error) {
 	nodes := make(map[string]StorageNode, len(raftNodes))
 	localNodeAddress := ""

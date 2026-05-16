@@ -23,6 +23,9 @@ func (*testStorageNode) ReadShard(_ context.Context, _, _ string, _ int) ([]byte
 func (*testStorageNode) ShardExists(_ context.Context, _, _ string, _ int) bool {
 	return false
 }
+func (*testStorageNode) DeleteShard(_ context.Context, _, _ string, _ int) error {
+	return nil
+}
 
 func TestRoundRobinPlacementAcrossRegisteredNodes(t *testing.T) {
 	e := newTestEngine(t)

@@ -16,8 +16,9 @@ type ShardMove struct {
 }
 
 type RebalanceObjectResult struct {
-	Object ObjectInfo  `json:"object"`
-	Moved  []ShardMove `json:"moved"`
+	Object        ObjectInfo  `json:"object"`
+	Moved         []ShardMove `json:"moved"`
+	CleanupErrors []string    `json:"cleanup_errors,omitempty"`
 }
 
 func (e *Engine) RebalanceObjectFromNode(ctx context.Context, bucket, key, fromNodeID string) (RebalanceObjectResult, error) {
@@ -41,7 +42,12 @@ func (e *Engine) RebalanceObjectFromNode(ctx context.Context, bucket, key, fromN
 	if err := e.persistLayout(layout); err != nil {
 		return RebalanceObjectResult{}, err
 	}
-	return RebalanceObjectResult{Object: e.objectInfoFromLayout(layout), Moved: moved}, nil
+	cleanupErrors := e.cleanupMovedShards(ctx, layout, moved)
+	return RebalanceObjectResult{
+		Object:        e.objectInfoFromLayout(layout),
+		Moved:         moved,
+		CleanupErrors: cleanupErrors,
+	}, nil
 }
 
 func (e *Engine) rebalanceLayoutPlacements(
@@ -99,6 +105,27 @@ func (e *Engine) moveShard(ctx context.Context, layout *Layout, index int, targe
 	}
 	if err := e.writeShard(ctx, target, layout.ShardDir, layout.Hash, index, data); err != nil {
 		return fmt.Errorf("write shard %d for rebalance: %w", index, err)
+	}
+	return nil
+}
+
+func (e *Engine) cleanupMovedShards(ctx context.Context, layout *Layout, moved []ShardMove) []string {
+	cleanupErrors := make([]string, 0)
+	for _, move := range moved {
+		if err := e.deleteShard(ctx, move.From, layout.ShardDir, layout.Hash, move.Index); err != nil {
+			cleanupErrors = append(cleanupErrors, err.Error())
+		}
+	}
+	return cleanupErrors
+}
+
+func (e *Engine) deleteShard(ctx context.Context, placement model.ShardPlacement, shardDir, hash string, index int) error {
+	node, err := e.storageNode(placement)
+	if err != nil {
+		return err
+	}
+	if err := node.DeleteShard(ctx, shardDir, hash, index); err != nil {
+		return fmt.Errorf("delete shard from node %q: %w", node.ID(), err)
 	}
 	return nil
 }
