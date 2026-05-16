@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lyonbrown4d/maxio/internal/config"
 	"github.com/lyonbrown4d/maxio/object"
 )
 
@@ -27,12 +28,14 @@ const defaultRepairStatusPath = "/_repair/status"
 
 type Service struct {
 	logger *slog.Logger
+	cfg    config.Config
 	Dependencies
 }
 
-func NewService(deps Dependencies, logger *slog.Logger) *Service {
+func NewService(deps Dependencies, logger *slog.Logger, cfg config.Config) *Service {
 	return &Service{
 		logger:       logger,
+		cfg:          cfg,
 		Dependencies: deps,
 	}
 }
@@ -44,6 +47,10 @@ func (s *Service) RegisterHTTP(router *http.ServeMux) {
 func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	route := strings.Trim(path.Clean(r.URL.Path), "/")
 	parts := strings.Split(route, "/")
+	if s.requiresAdminAuth(route, parts) && !s.authorizeAdmin(r) {
+		s.writeUnauthorized(w)
+		return
+	}
 
 	if s.handleControlRoute(w, r, route, parts) {
 		return

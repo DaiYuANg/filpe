@@ -13,6 +13,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/lyonbrown4d/maxio/internal/config"
 	"github.com/lyonbrown4d/maxio/internal/engine"
 	"github.com/lyonbrown4d/maxio/internal/handler"
 	"github.com/lyonbrown4d/maxio/internal/model"
@@ -227,7 +228,7 @@ func assertRemoteNodesStoredShards(t *testing.T, nodes ...*inMemoryStorageNode) 
 
 func storageShardHandler(e *engine.Engine) *http.ServeMux {
 	logger := slog.New(slog.DiscardHandler)
-	service := handler.NewService(handler.NewDependencies(nil, e, nil, nil, nil, nil), logger)
+	service := handler.NewService(handler.NewDependencies(nil, e, nil, nil, nil, nil), logger, config.Config{})
 	router := http.NewServeMux()
 	service.RegisterHTTP(router)
 	return router
