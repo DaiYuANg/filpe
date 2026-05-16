@@ -47,6 +47,22 @@ func TestResumeStorageNodeRestoresNewPlacements(t *testing.T) {
 	assertPlacementIncludesNode(t, meta.ShardPlacements, nodeA.id)
 }
 
+func TestStorageNodeInfosReportsDrainState(t *testing.T) {
+	eng := newTestEngine(t)
+	nodeA := newInMemoryStorageNode("node-a", "127.0.0.1:7001")
+	if err := registerDistributedPlacementNodes(t, eng, nodeA); err != nil {
+		t.Fatal(err)
+	}
+	if err := eng.DrainStorageNode(nodeA.id); err != nil {
+		t.Fatalf("drain storage node: %v", err)
+	}
+
+	info := findStorageNodeInfo(t, eng.StorageNodeInfos(), nodeA.id)
+	if !info.Drained {
+		t.Fatalf("node %q is not reported as drained", nodeA.id)
+	}
+}
+
 func putObjectForDrain(ctx context.Context, t *testing.T, eng *engine.Engine, key string) engine.ObjectInfo {
 	t.Helper()
 	meta, err := eng.PutObject(ctx, "test-bucket", key, strings.NewReader("drain placement payload"), "text/plain")
@@ -54,6 +70,17 @@ func putObjectForDrain(ctx context.Context, t *testing.T, eng *engine.Engine, ke
 		t.Fatalf("PutObject: %v", err)
 	}
 	return meta
+}
+
+func findStorageNodeInfo(t *testing.T, infos []engine.StorageNodeInfo, nodeID string) engine.StorageNodeInfo {
+	t.Helper()
+	for _, info := range infos {
+		if info.ID == nodeID {
+			return info
+		}
+	}
+	t.Fatalf("storage node info for %q not found", nodeID)
+	return engine.StorageNodeInfo{}
 }
 
 func assertPlacementExcludesNode(t *testing.T, placements []model.ShardPlacement, nodeID string) {

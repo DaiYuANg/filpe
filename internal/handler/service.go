@@ -18,6 +18,7 @@ const defaultSearchPath = "/_search"
 const defaultClusterMembersPath = "/_cluster/members"
 const defaultClusterBootstrapPath = "/_cluster/bootstrap"
 const defaultClusterJoinPath = "/_cluster/join"
+const defaultClusterStorageNodesPath = "/_cluster/storage-nodes"
 const defaultDiscoveryPath = "/_cluster/discovery"
 const defaultRepairStatusPath = "/_repair/status"
 
