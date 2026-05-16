@@ -1,16 +1,20 @@
 package index
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/arcgolabs/collectionx/list"
 	"github.com/blevesearch/bleve/v2"
-	qry "github.com/blevesearch/bleve/v2/search/query"
+	"github.com/lyonbrown4d/maxio/internal/config"
 	"github.com/lyonbrown4d/maxio/internal/model"
 )
+
+const indexDir = "index/bleve"
 
 type SearchEngine struct {
 	logger *slog.Logger
@@ -20,7 +24,23 @@ type SearchEngine struct {
 	items  map[string]model.ObjectMeta
 }
 
-func NewSearchEngine() *SearchEngine {
+func NewSearchEngine(cfg config.Config, logger *slog.Logger) (*SearchEngine, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	idx, err := openPersistentIndex(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &SearchEngine{
+		logger: logger,
+		index:  idx,
+		ready:  true,
+		items:  make(map[string]model.ObjectMeta),
+	}, nil
+}
+
+func NewInMemorySearchEngine() *SearchEngine {
 	mapping := bleve.NewIndexMapping()
 	idx, err := bleve.NewMemOnly(mapping)
 	if err != nil {
@@ -38,17 +58,33 @@ func NewSearchEngine() *SearchEngine {
 	}
 }
 
+func openPersistentIndex(cfg config.Config) (bleve.Index, error) {
+	path := filepath.Join(cfg.DataDir, indexDir)
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return nil, fmt.Errorf("create search index parent: %w", err)
+	}
+	idx, err := bleve.Open(path)
+	if err == nil {
+		return idx, nil
+	}
+	if !errors.Is(err, bleve.ErrorIndexPathDoesNotExist) {
+		return nil, fmt.Errorf("open search index: %w", err)
+	}
+	idx, err = bleve.New(path, bleve.NewIndexMapping())
+	if err != nil {
+		return nil, fmt.Errorf("create search index: %w", err)
+	}
+	return idx, nil
+}
+
 func (s *SearchEngine) Upsert(meta model.ObjectMeta) {
+	s.UpsertDocument(meta, "")
+}
+
+func (s *SearchEngine) UpsertDocument(meta model.ObjectMeta, text string) {
 	id := objectID(meta.Bucket, meta.Key)
+	doc := documentFromMeta(meta, text)
 	if s.ready {
-		doc := map[string]any{
-			"bucket":        strings.ToLower(meta.Bucket),
-			"key":           meta.Key,
-			"name_contains": meta.Key,
-			"size":          float64(meta.Size),
-			"etag":          meta.ETag,
-			"content_type":  meta.ContentType,
-		}
 		if err := s.index.Index(id, doc); err != nil {
 			s.logger.Warn("upsert search index failed", "error", err)
 		}
@@ -85,51 +121,58 @@ func (s *SearchEngine) Search(query model.SearchQuery) model.SearchResult {
 	return s.resultFromHits(query, hits)
 }
 
-func (s *SearchEngine) searchIndex(query model.SearchQuery) ([]string, error) {
+func (s *SearchEngine) Close() error {
+	if s == nil || s.index == nil {
+		return nil
+	}
+	if err := s.index.Close(); err != nil {
+		return fmt.Errorf("close search index: %w", err)
+	}
+	return nil
+}
+
+func (s *SearchEngine) searchIndex(query model.SearchQuery) ([]searchHit, error) {
 	req := bleve.NewSearchRequest(s.buildQuery(query))
 	if query.Limit > 0 {
 		req.Size = query.Limit
 	}
-	req.Fields = []string{"*"}
+	req.Fields = []string{"bucket", "key", "hash", "etag", "size", "content_type", "updated_at"}
 	result, err := s.index.Search(req)
 	if err != nil {
 		return nil, fmt.Errorf("search bleve index: %w", err)
 	}
-	ids := make([]string, 0, len(result.Hits))
+	hits := make([]searchHit, 0, len(result.Hits))
 	for _, hit := range result.Hits {
-		ids = append(ids, hit.ID)
+		hits = append(hits, searchHit{
+			ID:     hit.ID,
+			Fields: hit.Fields,
+		})
 	}
-	return ids, nil
+	return hits, nil
 }
 
-func (s *SearchEngine) resultFromHits(query model.SearchQuery, hitIDs []string) model.SearchResult {
+type searchHit struct {
+	ID     string
+	Fields map[string]any
+}
+
+func (s *SearchEngine) resultFromHits(query model.SearchQuery, hits []searchHit) model.SearchResult {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	items := list.NewListWithCapacity[model.ObjectMeta](len(hitIDs))
-	for _, id := range hitIDs {
-		meta, ok := s.items[id]
+	items := list.NewListWithCapacity[model.ObjectMeta](len(hits))
+	for _, hit := range hits {
+		meta, ok := s.items[hit.ID]
 		if !ok {
+			meta = metaFromFields(hit.Fields)
+		}
+		if meta.Bucket == "" || meta.Key == "" {
 			continue
 		}
 		items.Add(meta)
 	}
 
-	sorted := items.Sort(func(left, right model.ObjectMeta) int {
-		switch {
-		case left.UpdatedAt.After(right.UpdatedAt):
-			return -1
-		case left.UpdatedAt.Before(right.UpdatedAt):
-			return 1
-		default:
-			return 0
-		}
-	})
-	resultItems := sorted.Values()
-	if query.Limit > 0 && len(resultItems) > query.Limit {
-		resultItems = resultItems[:query.Limit]
-	}
-	return model.SearchResult{Items: resultItems}
+	return limitedSearchResult(query, items)
 }
 
 func (s *SearchEngine) searchFromMemory(query model.SearchQuery) model.SearchResult {
@@ -139,83 +182,9 @@ func (s *SearchEngine) searchFromMemory(query model.SearchQuery) model.SearchRes
 	items := list.NewListWithCapacity[model.ObjectMeta](len(s.items))
 	for key := range s.items {
 		meta := s.items[key]
-		items.Add(meta)
-	}
-
-	matched := items.Where(func(_ int, meta model.ObjectMeta) bool {
-		return s.matchQuery(meta, query)
-	}).Sort(func(left, right model.ObjectMeta) int {
-		switch {
-		case left.UpdatedAt.After(right.UpdatedAt):
-			return -1
-		case left.UpdatedAt.Before(right.UpdatedAt):
-			return 1
-		default:
-			return 0
+		if matchesQuery(meta, query) {
+			items.Add(meta)
 		}
-	})
-	resultItems := matched.Values()
-	if query.Limit > 0 && len(resultItems) > query.Limit {
-		resultItems = resultItems[:query.Limit]
 	}
-	return model.SearchResult{Items: resultItems}
-}
-
-func (s *SearchEngine) matchQuery(meta model.ObjectMeta, query model.SearchQuery) bool {
-	return (query.Bucket == "" || meta.Bucket == query.Bucket) &&
-		(query.Prefix == "" || strings.HasPrefix(meta.Key, query.Prefix)) &&
-		(query.NameContains == "" || strings.Contains(meta.Key, query.NameContains)) &&
-		(query.MinSize <= 0 || meta.Size >= query.MinSize) &&
-		(query.MaxSize <= 0 || meta.Size <= query.MaxSize)
-}
-
-func (s *SearchEngine) buildQuery(criteria model.SearchQuery) qry.Query {
-	queries := make([]qry.Query, 0, 4)
-
-	if criteria.Bucket != "" {
-		q := bleve.NewMatchQuery(strings.ToLower(criteria.Bucket))
-		q.SetField("bucket")
-		queries = append(queries, q)
-	}
-	if criteria.Prefix != "" {
-		q := bleve.NewPrefixQuery(criteria.Prefix)
-		q.SetField("key")
-		queries = append(queries, q)
-	}
-	if criteria.NameContains != "" {
-		q := bleve.NewMatchQuery(criteria.NameContains)
-		q.SetField("name_contains")
-		queries = append(queries, q)
-	}
-
-	if criteria.MinSize > 0 || criteria.MaxSize > 0 {
-		queries = append(queries, sizeRangeQuery(criteria))
-	}
-
-	if len(queries) == 0 {
-		return bleve.NewMatchAllQuery()
-	}
-	if len(queries) == 1 {
-		return queries[0]
-	}
-	return bleve.NewConjunctionQuery(queries...)
-}
-
-func sizeRangeQuery(criteria model.SearchQuery) qry.Query {
-	var minSize, maxSize *float64
-	if criteria.MinSize > 0 {
-		minSizeValue := float64(criteria.MinSize)
-		minSize = &minSizeValue
-	}
-	if criteria.MaxSize > 0 {
-		maxSizeValue := float64(criteria.MaxSize)
-		maxSize = &maxSizeValue
-	}
-	size := bleve.NewNumericRangeQuery(minSize, maxSize)
-	size.SetField("size")
-	return size
-}
-
-func objectID(bucket, key string) string {
-	return bucket + "\x00" + key
+	return limitedSearchResult(query, items)
 }

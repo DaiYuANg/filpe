@@ -88,7 +88,7 @@ func newMultipartTestService(t *testing.T) (*maxios3.Service, *object.Service) {
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	objects := object.NewService(storage, index.NewSearchEngine(), nil, slog.New(slog.DiscardHandler))
+	objects := object.NewService(storage, index.NewInMemorySearchEngine(), nil, slog.New(slog.DiscardHandler))
 	if err := objects.CreateBucket(ctx, "bucket"); err != nil {
 		t.Fatalf("create bucket: %v", err)
 	}

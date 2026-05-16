@@ -96,7 +96,6 @@ func (s *Service) PutObject(ctx context.Context, bucket, key string, reader io.R
 	if err := s.publishObjectEvent(ctx, "object.updated", meta); err != nil {
 		s.logger.WarnContext(ctx, "publish object event failed", "event", "object.updated", "error", err)
 	}
-	s.search.Upsert(meta)
 	return meta, nil
 }
 
@@ -124,7 +123,6 @@ func (s *Service) DeleteObject(ctx context.Context, bucket, key string) (ObjectM
 	if err := s.publishObjectEvent(ctx, "object.deleted", meta); err != nil {
 		s.logger.WarnContext(ctx, "publish object event failed", "event", "object.deleted", "error", err)
 	}
-	s.search.Remove(bucket, key)
 	return meta, nil
 }
 

@@ -2,6 +2,8 @@
 package index
 
 import (
+	"context"
+
 	"github.com/arcgolabs/dix"
 )
 
@@ -9,7 +11,12 @@ func Module() dix.Module {
 	return dix.NewModule(
 		"index",
 		dix.WithModuleProviders(
-			dix.Provider0(NewSearchEngine),
+			dix.ProviderErr2(NewSearchEngine),
+		),
+		dix.Hooks(
+			dix.OnStop(func(_ context.Context, search *SearchEngine) error {
+				return search.Close()
+			}),
 		),
 	)
 }

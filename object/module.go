@@ -1,13 +1,22 @@
 // Package object exposes MaxIO's public object service API.
 package object
 
-import "github.com/arcgolabs/dix"
+import (
+	"context"
+
+	"github.com/arcgolabs/dix"
+)
 
 func Module() dix.Module {
 	return dix.NewModule(
 		"object",
 		dix.WithModuleProviders(
 			dix.Provider4(NewService),
+		),
+		dix.Hooks(
+			dix.OnStart(func(ctx context.Context, service *Service) error {
+				return service.StartIndexWorker(ctx)
+			}),
 		),
 	)
 }

@@ -201,8 +201,11 @@ func (s *Service) handleSearch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
+		query.Query = r.URL.Query().Get("q")
 		query.Bucket = r.URL.Query().Get("bucket")
 		query.Prefix = r.URL.Query().Get("prefix")
+		query.NameContains = r.URL.Query().Get("name_contains")
+		query.ContentType = r.URL.Query().Get("content_type")
 	}
 
 	result, err := s.objects.Search(r.Context(), query)

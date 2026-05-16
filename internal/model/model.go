@@ -34,9 +34,11 @@ type ObjectMeta struct {
 }
 
 type SearchQuery struct {
+	Query        string `json:"q,omitempty"`
 	Bucket       string `json:"bucket,omitempty"`
 	Prefix       string `json:"prefix,omitempty"`
 	NameContains string `json:"name_contains,omitempty"`
+	ContentType  string `json:"content_type,omitempty"`
 	Limit        int    `json:"limit,omitempty"`
 	MinSize      int64  `json:"min_size,omitempty"`
 	MaxSize      int64  `json:"max_size,omitempty"`
