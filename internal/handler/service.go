@@ -115,12 +115,14 @@ func (s *Service) handleBucket(w http.ResponseWriter, r *http.Request, bucket st
 			s.writeError(w, err)
 			return
 		}
+		s.auditHTTP(r, "bucket.create", "bucket", bucket)
 		s.writeJSON(w, http.StatusCreated, map[string]string{"bucket": bucket, "status": "created"})
 	case http.MethodDelete:
 		if err := s.objects.DeleteBucket(r.Context(), bucket); err != nil {
 			s.writeError(w, err)
 			return
 		}
+		s.auditHTTP(r, "bucket.delete", "bucket", bucket)
 		s.writeJSON(w, http.StatusNoContent, nil)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -179,6 +181,12 @@ func (s *Service) handlePutObject(w http.ResponseWriter, r *http.Request, bucket
 		s.writeError(w, err)
 		return
 	}
+	s.auditHTTP(r, "object.put",
+		"bucket", bucket,
+		"key", key,
+		"size", meta.Size,
+		"etag", meta.ETag,
+	)
 	s.writeJSON(w, http.StatusOK, meta)
 }
 
@@ -188,6 +196,7 @@ func (s *Service) handleDeleteObject(w http.ResponseWriter, r *http.Request, buc
 		s.writeError(w, err)
 		return
 	}
+	s.auditHTTP(r, "object.delete", "bucket", bucket, "key", key)
 	w.WriteHeader(http.StatusNoContent)
 }
 
