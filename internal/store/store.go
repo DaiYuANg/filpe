@@ -23,8 +23,9 @@ var (
 
 // Store is the unified object store: Raft metadata + erasure-coded file storage.
 type Store struct {
-	meta   metadata.MetadataStore
-	engine *engine.Engine
+	meta     metadata.MetadataStore
+	engine   *engine.Engine
+	recovery recoveryState
 }
 
 type blobRefMutation int

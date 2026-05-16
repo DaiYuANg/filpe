@@ -21,6 +21,7 @@ var (
 )
 
 type BlobRef struct {
+	Hash            string
 	Path            string
 	ShardPlacements []model.ShardPlacement
 	ShardChecksums  []string
@@ -42,6 +43,7 @@ type MetadataStore interface {
 	DeleteStagedObjectMeta(ctx context.Context, bucket, key string) (model.ObjectMeta, bool, error)
 	DeleteObjectMeta(ctx context.Context, bucket, key string) (model.ObjectMeta, bool, error)
 
+	ListBlobRefs(ctx context.Context) ([]BlobRef, error)
 	GetBlobRef(ctx context.Context, hash string) (BlobRef, bool, error)
 	CreateBlobRef(ctx context.Context, hash, path string, size int64, placements []model.ShardPlacement, checksums []string) error
 	UpdateBlobRefPlacements(ctx context.Context, hash string, placements []model.ShardPlacement) error

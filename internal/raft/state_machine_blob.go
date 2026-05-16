@@ -22,6 +22,7 @@ func (s *raftStateMachine) createBlobRef(
 		return ""
 	}
 	s.blobRefs[hash] = MetadataBlobRef{
+		Hash:            hash,
 		Path:            path,
 		ShardPlacements: cloneRaftBlobPlacements(shardPlacements),
 		ShardChecksums:  cloneRaftBlobChecksums(shardChecksums),
@@ -29,6 +30,17 @@ func (s *raftStateMachine) createBlobRef(
 		Size:            size,
 	}
 	return ""
+}
+
+func (s *raftStateMachine) listBlobRefs() []MetadataBlobRef {
+	refs := make([]MetadataBlobRef, 0, len(s.blobRefs))
+	for hash, ref := range s.blobRefs {
+		ref.Hash = hash
+		ref.ShardPlacements = cloneRaftBlobPlacements(ref.ShardPlacements)
+		ref.ShardChecksums = cloneRaftBlobChecksums(ref.ShardChecksums)
+		refs = append(refs, ref)
+	}
+	return refs
 }
 
 func (s *raftStateMachine) increaseBlobRef(hash string) string {

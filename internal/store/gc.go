@@ -20,16 +20,22 @@ func (c *pendingCleanup) run(ctx context.Context) error {
 	if c.store == nil {
 		return nil
 	}
-	removed, err := c.store.CleanupPendingObjects(ctx, c.cfg.PendingObjectTTLDuration(), c.logger)
+	result, err := c.store.Recover(ctx, RecoveryOptions{
+		PendingTTL:          c.cfg.PendingObjectTTLDuration(),
+		CleanupOrphanShards: true,
+		Logger:              c.logger,
+	})
 	if err != nil {
 		if c.logger != nil {
-			c.logger.WarnContext(ctx, "pending object cleanup failed", "error", err)
+			c.logger.WarnContext(ctx, "store recovery failed", "error", err)
 		}
 		return nil
 	}
 	if c.logger != nil {
-		c.logger.InfoContext(ctx, "pending object cleanup completed",
-			"removed", removed,
+		c.logger.InfoContext(ctx, "store recovery completed",
+			"pending_removed", result.PendingRemoved,
+			"orphan_shard_sets_removed", result.OrphanShardCleanup.Removed,
+			"orphan_shard_sets_scanned", result.OrphanShardCleanup.Scanned,
 			"ttl", c.cfg.PendingObjectTTL,
 		)
 	}

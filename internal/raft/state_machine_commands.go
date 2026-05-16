@@ -74,6 +74,8 @@ func (s *raftStateMachine) lookupMetadataQuery(query MetadataQuery) metadataEnve
 		return s.lookupListObjectMetas(query.Bucket, query.Prefix)
 	case MetadataQueryListStagedObjectMetas:
 		return s.lookupListStagedObjectMetas(query.Bucket, query.Prefix)
+	case MetadataQueryListBlobRefs:
+		return metadataEnvelope{Result: MetadataResult{Blobs: s.listBlobRefs()}}
 	case MetadataQueryGetObjectMeta:
 		return s.lookupObjectMeta(query.Bucket, query.Key)
 	case MetadataQueryGetBlobRef:
@@ -111,6 +113,7 @@ func (s *raftStateMachine) lookupBlobRef(hash string) metadataEnvelope {
 		return metadataEnvelope{Error: MetadataErrorBadRequest}
 	}
 	ref, ok := s.blobRefs[hash]
+	ref.Hash = hash
 	return metadataEnvelope{Result: MetadataResult{Blob: ref, BlobExists: ok}}
 }
 

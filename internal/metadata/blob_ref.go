@@ -10,7 +10,21 @@ func (m *InMemoryMetadata) GetBlobRef(_ context.Context, hash string) (BlobRef, 
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	ref, ok := m.blobs[hash]
+	ref.Hash = hash
 	return ref, ok, nil
+}
+
+func (m *InMemoryMetadata) ListBlobRefs(_ context.Context) ([]BlobRef, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	refs := make([]BlobRef, 0, len(m.blobs))
+	for hash, ref := range m.blobs {
+		ref.Hash = hash
+		ref.ShardPlacements = cloneBlobRefPlacements(ref.ShardPlacements)
+		ref.ShardChecksums = cloneStrings(ref.ShardChecksums)
+		refs = append(refs, ref)
+	}
+	return refs, nil
 }
 
 func (m *InMemoryMetadata) CreateBlobRef(
@@ -27,6 +41,7 @@ func (m *InMemoryMetadata) CreateBlobRef(
 		return nil
 	}
 	m.blobs[hash] = BlobRef{
+		Hash:            hash,
 		Path:            path,
 		ShardPlacements: cloneBlobRefPlacements(placements),
 		ShardChecksums:  cloneStrings(checksums),

@@ -25,6 +25,8 @@ const defaultClusterStorageNodesPath = "/_cluster/storage-nodes"
 const defaultClusterStorageNodesSyncPath = "/_cluster/storage-nodes/sync"
 const defaultDiscoveryPath = "/_cluster/discovery"
 const defaultRepairStatusPath = "/_repair/status"
+const defaultRecoveryStatusPath = "/_recovery/status"
+const defaultRecoveryRunPath = "/_recovery/run"
 const defaultIndexStatusPath = "/_index/status"
 const defaultIndexRebuildPath = "/_index/rebuild"
 

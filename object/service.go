@@ -31,6 +31,8 @@ type SearchResult = model.SearchResult
 type Health = engine.Health
 type RepairResult = engine.RepairResult
 type RebalanceResult = store.RebalanceResult
+type RecoveryResult = store.RecoveryResult
+type RecoveryStatus = store.RecoveryStatus
 
 type PutOptions = store.PutOptions
 
@@ -154,6 +156,24 @@ func (s *Service) RebalanceNode(ctx context.Context, nodeID string) (RebalanceRe
 		return RebalanceResult{}, fmt.Errorf("rebalance node: %w", err)
 	}
 	return result, nil
+}
+
+func (s *Service) Recover(ctx context.Context) (RecoveryResult, error) {
+	result, err := s.store.Recover(ctx, store.RecoveryOptions{
+		PendingTTL:          s.cfg.PendingObjectTTLDuration(),
+		CleanupOrphanShards: true,
+	})
+	if err != nil {
+		return RecoveryResult{}, fmt.Errorf("recover storage: %w", err)
+	}
+	return result, nil
+}
+
+func (s *Service) RecoveryStatus() RecoveryStatus {
+	if s == nil || s.store == nil {
+		return RecoveryStatus{}
+	}
+	return s.store.RecoveryStatus()
 }
 
 func (s *Service) Search(ctx context.Context, query SearchQuery) (SearchResult, error) {

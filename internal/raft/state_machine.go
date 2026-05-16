@@ -31,11 +31,13 @@ const (
 	MetadataQueryBucketExists          = "bucket_exists"
 	MetadataQueryListObjectMetas       = "list_object_metas"
 	MetadataQueryListStagedObjectMetas = "list_staged_object_metas"
+	MetadataQueryListBlobRefs          = "list_blob_refs"
 	MetadataQueryGetObjectMeta         = "get_object_meta"
 	MetadataQueryGetBlobRef            = "get_blob_ref"
 )
 
 type MetadataBlobRef struct {
+	Hash            string                 `json:"hash,omitempty"`
 	Path            string                 `json:"path"`
 	ShardPlacements []model.ShardPlacement `json:"shard_placements,omitempty"`
 	ShardChecksums  []string               `json:"shard_checksums,omitempty"`
@@ -70,6 +72,7 @@ type MetadataResult struct {
 	Objects      []model.ObjectMeta `json:"objects,omitempty"`
 	Object       model.ObjectMeta   `json:"object"`
 	ObjectExists bool               `json:"object_exists,omitempty"`
+	Blobs        []MetadataBlobRef  `json:"blobs,omitempty"`
 	Blob         MetadataBlobRef    `json:"blob"`
 	BlobExists   bool               `json:"blob_exists,omitempty"`
 	BlobPath     string             `json:"blob_path,omitempty"`

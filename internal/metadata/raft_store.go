@@ -82,6 +82,18 @@ func (r *RaftMetadata) ListStagedObjectMetas(ctx context.Context, bucket, prefix
 	return result.Objects, nil
 }
 
+func (r *RaftMetadata) ListBlobRefs(ctx context.Context) ([]BlobRef, error) {
+	result, err := r.runtime.ReadMetadata(ctx, raftx.MetadataQuery{Type: raftx.MetadataQueryListBlobRefs})
+	if err != nil {
+		return nil, mapRaftError(err)
+	}
+	refs := make([]BlobRef, 0, len(result.Blobs))
+	for index := range result.Blobs {
+		refs = append(refs, fromRaftBlobRef(result.Blobs[index]))
+	}
+	return refs, nil
+}
+
 func (r *RaftMetadata) GetObjectMeta(ctx context.Context, bucket, key string) (model.ObjectMeta, bool, error) {
 	result, err := r.runtime.ReadMetadata(ctx, raftx.MetadataQuery{
 		Type:   raftx.MetadataQueryGetObjectMeta,
@@ -218,6 +230,7 @@ func mapRaftError(err error) error {
 
 func fromRaftBlobRef(ref raftx.MetadataBlobRef) BlobRef {
 	return BlobRef{
+		Hash:            ref.Hash,
 		Path:            ref.Path,
 		ShardPlacements: ref.ShardPlacements,
 		ShardChecksums:  ref.ShardChecksums,
