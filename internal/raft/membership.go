@@ -71,6 +71,13 @@ func (rt *Runtime) AddReplica(ctx context.Context, replicaID uint64, target stri
 	if err != nil {
 		return fmt.Errorf("get raft membership before add replica: %w", err)
 	}
+	shouldAdd, err := ensureReplicaAddable(membership.Nodes, membership.Removed, replicaID, target)
+	if err != nil {
+		return err
+	}
+	if !shouldAdd {
+		return nil
+	}
 	if err := rt.node.SyncRequestAddReplica(ctx, rt.cfg.shardID, replicaID, target, membership.ConfigChangeID); err != nil {
 		return fmt.Errorf("add raft replica: %w", err)
 	}
@@ -91,6 +98,9 @@ func (rt *Runtime) RemoveReplica(ctx context.Context, replicaID uint64) error {
 	membership, err := rt.node.SyncGetShardMembership(ctx, rt.cfg.shardID)
 	if err != nil {
 		return fmt.Errorf("get raft membership before remove replica: %w", err)
+	}
+	if _, exists := membership.Nodes[replicaID]; !exists {
+		return nil
 	}
 	if err := rt.node.SyncRequestDeleteReplica(ctx, rt.cfg.shardID, replicaID, membership.ConfigChangeID); err != nil {
 		return fmt.Errorf("remove raft replica: %w", err)
@@ -197,6 +207,24 @@ func validateDesiredReplicaTargets(current Membership, desired map[uint64]string
 		}
 	}
 	return nil
+}
+
+func ensureReplicaAddable(
+	nodes map[uint64]string,
+	removed map[uint64]struct{},
+	replicaID uint64,
+	target string,
+) (bool, error) {
+	if _, exists := removed[replicaID]; exists {
+		return false, fmt.Errorf("raft replica %d has been removed and cannot be added back", replicaID)
+	}
+	if existing, exists := nodes[replicaID]; exists {
+		if existing == target {
+			return false, nil
+		}
+		return false, fmt.Errorf("raft replica %d target cannot be changed from %q to %q", replicaID, existing, target)
+	}
+	return true, nil
 }
 
 func missingReplicas(current, desired map[uint64]string) []Replica {
