@@ -1,0 +1,12 @@
+.git
+.gitignore
+.idea
+.vscode
+data
+tmp
+dist
+build
+coverage.out
+*.test
+*.exe
+Dockerfile
