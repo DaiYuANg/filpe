@@ -34,6 +34,7 @@ type Engine struct {
 	backend      ShardStore
 	layoutCache  sync.Map // string -> *Layout
 	nodes        map[string]StorageNode
+	drainedNodes map[string]struct{}
 	localNodeID  string
 	planner      PlacementPlanner
 }

@@ -34,6 +34,7 @@ func (e *Engine) SyncStorageNodesFromRaft(localReplicaID uint64, raftNodes map[u
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	drainedNodes := e.drainedNodeIDsLocked()
 	localNodeID := raftStorageNodeID(localReplicaID)
 	localNodeAddress := e.localNodeAddress(localNodeID)
 	nextNodes, _, err := syncRaftStorageNodes(localReplicaID, raftNodes)
@@ -42,10 +43,12 @@ func (e *Engine) SyncStorageNodesFromRaft(localReplicaID uint64, raftNodes map[u
 	}
 
 	e.nodes = map[string]StorageNode{}
+	e.drainedNodes = map[string]struct{}{}
 	e.configureLocalNodeLocked(localNodeID, localNodeAddress)
 	for _, node := range nextNodes {
 		e.nodes[node.ID()] = node
 	}
+	e.restoreDrainedNodesLocked(drainedNodes)
 	e.reconfigurePlacementPlannerLocked()
 	return nil
 }
@@ -152,6 +155,40 @@ func (e *Engine) UnregisterStorageNode(nodeID string) error {
 		return errors.New("storage node does not exist")
 	}
 	delete(e.nodes, nodeID)
+	delete(e.drainedNodes, nodeID)
+	e.reconfigurePlacementPlannerLocked()
+	return nil
+}
+
+func (e *Engine) DrainStorageNode(nodeID string) error {
+	nodeID = strings.TrimSpace(nodeID)
+	if nodeID == "" {
+		return errors.New("storage node id is required")
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if _, ok := e.nodes[nodeID]; !ok {
+		return errors.New("storage node does not exist")
+	}
+	if e.drainedNodes == nil {
+		e.drainedNodes = map[string]struct{}{}
+	}
+	e.drainedNodes[nodeID] = struct{}{}
+	e.reconfigurePlacementPlannerLocked()
+	return nil
+}
+
+func (e *Engine) ResumeStorageNode(nodeID string) error {
+	nodeID = strings.TrimSpace(nodeID)
+	if nodeID == "" {
+		return errors.New("storage node id is required")
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if _, ok := e.nodes[nodeID]; !ok {
+		return errors.New("storage node does not exist")
+	}
+	delete(e.drainedNodes, nodeID)
 	e.reconfigurePlacementPlannerLocked()
 	return nil
 }
@@ -168,11 +205,12 @@ func (e *Engine) registerStorageNodeLocked(node StorageNode) {
 		e.nodes = map[string]StorageNode{}
 	}
 	e.nodes[nodeID] = node
+	delete(e.drainedNodes, nodeID)
 	e.reconfigurePlacementPlannerLocked()
 }
 
 func (e *Engine) reconfigurePlacementPlannerLocked() {
-	nodes := e.storageNodesLocked()
+	nodes := e.placementNodesLocked()
 	switch len(nodes) {
 	case 0:
 		e.planner = nil
@@ -181,6 +219,20 @@ func (e *Engine) reconfigurePlacementPlannerLocked() {
 	default:
 		e.planner = NewRoundRobinPlacementPlanner(e.localNodeID, nodes...)
 	}
+}
+
+func (e *Engine) placementNodesLocked() []StorageNode {
+	nodes := e.storageNodesLocked()
+	if len(e.drainedNodes) == 0 {
+		return nodes
+	}
+	active := make([]StorageNode, 0, len(nodes))
+	for _, node := range nodes {
+		if _, drained := e.drainedNodes[node.ID()]; !drained {
+			active = append(active, node)
+		}
+	}
+	return active
 }
 
 func (e *Engine) storageNodesLocked() []StorageNode {
@@ -196,6 +248,28 @@ func (e *Engine) storageNodesLocked() []StorageNode {
 		return strings.TrimSpace(nodes[left].ID()) < strings.TrimSpace(nodes[right].ID())
 	})
 	return nodes
+}
+
+func (e *Engine) drainedNodeIDsLocked() []string {
+	nodeIDs := make([]string, 0, len(e.drainedNodes))
+	for nodeID := range e.drainedNodes {
+		nodeIDs = append(nodeIDs, nodeID)
+	}
+	return nodeIDs
+}
+
+func (e *Engine) restoreDrainedNodesLocked(nodeIDs []string) {
+	if len(nodeIDs) == 0 {
+		return
+	}
+	if e.drainedNodes == nil {
+		e.drainedNodes = map[string]struct{}{}
+	}
+	for _, nodeID := range nodeIDs {
+		if _, exists := e.nodes[nodeID]; exists {
+			e.drainedNodes[nodeID] = struct{}{}
+		}
+	}
 }
 
 func cloneStorageNodes(input []StorageNode) []StorageNode {

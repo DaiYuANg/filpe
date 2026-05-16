@@ -32,6 +32,10 @@ func (s *Service) handleNamedControlRoute(w http.ResponseWriter, r *http.Request
 	if s.handleStorageShardRoute(w, r, parts) {
 		return true
 	}
+	if isClusterMemberActionRoute(parts) {
+		s.handleClusterMemberAction(w, r, parts[2], parts[3])
+		return true
+	}
 	if isClusterMemberRoute(parts) {
 		s.handleClusterMember(w, r, parts[2])
 		return true
@@ -45,4 +49,8 @@ func isHealthRoute(route string) bool {
 
 func isClusterMemberRoute(parts []string) bool {
 	return len(parts) == 3 && parts[0] == "_cluster" && parts[1] == "members"
+}
+
+func isClusterMemberActionRoute(parts []string) bool {
+	return len(parts) == 4 && parts[0] == "_cluster" && parts[1] == "members"
 }

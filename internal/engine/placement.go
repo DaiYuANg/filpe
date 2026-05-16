@@ -130,6 +130,7 @@ func (e *Engine) configureLocalNodeLocked(id, address string) {
 	node := NewLocalStorageNode(id, address, e.backend)
 	e.localNodeID = node.ID()
 	e.nodes = map[string]StorageNode{}
+	e.drainedNodes = map[string]struct{}{}
 	e.registerStorageNodeLocked(node)
 }
 
