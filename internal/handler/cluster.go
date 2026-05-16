@@ -203,6 +203,10 @@ func (s *Service) handleClusterMember(w http.ResponseWriter, r *http.Request, re
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
+	if err := s.ensureClusterMemberDecommissionable(r.Context(), id); err != nil {
+		s.writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
 	if err := s.raft.RemoveReplica(r.Context(), id); err != nil {
 		s.writeError(w, err)
 		return
