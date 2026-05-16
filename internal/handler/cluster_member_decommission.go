@@ -1,0 +1,125 @@
+package handler
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+
+	raftx "github.com/lyonbrown4d/maxio/internal/raft"
+)
+
+var (
+	errCannotDecommissionLocalReplica = errors.New("cannot decommission local replica")
+	errClusterDecommissionBlocked     = errors.New("cluster member decommission blocked")
+)
+
+type clusterMemberDecommissionResponse struct {
+	ReplicaID uint64 `json:"replica_id"`
+	NodeID    string `json:"node_id"`
+	Objects   int    `json:"objects"`
+	Shards    int    `json:"shards"`
+	Status    string `json:"status"`
+}
+
+func (s *Service) handleDecommissionClusterMember(w http.ResponseWriter, r *http.Request, replicaID uint64) {
+	result, err := s.decommissionClusterMember(r.Context(), replicaID)
+	if err != nil {
+		s.writeDecommissionError(w, err)
+		return
+	}
+	s.auditHTTP(r, "cluster.member.decommission",
+		"replica_id", replicaID,
+		"node_id", result.NodeID,
+		"objects", result.Objects,
+		"shards", result.Shards,
+		"status", result.Status,
+	)
+	s.writeJSON(w, http.StatusAccepted, result)
+}
+
+func (s *Service) writeDecommissionError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errCannotDecommissionLocalReplica) {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if errors.Is(err, errClusterDecommissionBlocked) {
+		s.writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	s.writeError(w, err)
+}
+
+func (s *Service) decommissionClusterMember(
+	ctx context.Context,
+	replicaID uint64,
+) (clusterMemberDecommissionResponse, error) {
+	if s == nil || s.raft == nil || s.engine == nil || s.objects == nil {
+		return clusterMemberDecommissionResponse{}, errors.New("cluster decommission dependencies unavailable")
+	}
+	membership, err := s.raft.GetMembership(ctx)
+	if err != nil {
+		return clusterMemberDecommissionResponse{}, fmt.Errorf("get raft membership: %w", err)
+	}
+	present, err := ValidateClusterMemberDecommission(replicaID, membership)
+	if err != nil {
+		return clusterMemberDecommissionResponse{}, err
+	}
+	nodeID := clusterStorageNodeID(replicaID)
+	if !present {
+		if err := s.syncStorageNodes(ctx); err != nil {
+			return clusterMemberDecommissionResponse{}, fmt.Errorf("sync storage nodes after already decommissioned check: %w", err)
+		}
+		return clusterMemberDecommissionResponse{
+			ReplicaID: replicaID,
+			NodeID:    nodeID,
+			Status:    "already_decommissioned",
+		}, nil
+	}
+	return s.runClusterMemberDecommission(ctx, replicaID, nodeID)
+}
+
+func (s *Service) runClusterMemberDecommission(
+	ctx context.Context,
+	replicaID uint64,
+	nodeID string,
+) (clusterMemberDecommissionResponse, error) {
+	if err := s.syncStorageNodes(ctx); err != nil {
+		return clusterMemberDecommissionResponse{}, fmt.Errorf("sync storage nodes before decommission: %w", err)
+	}
+	if err := s.engine.DrainStorageNode(nodeID); err != nil {
+		return clusterMemberDecommissionResponse{}, fmt.Errorf("drain storage node: %w", err)
+	}
+	rebalance, err := s.objects.RebalanceNode(ctx, nodeID)
+	if err != nil {
+		return clusterMemberDecommissionResponse{}, fmt.Errorf("rebalance decommissioned node: %w", err)
+	}
+	if err := s.ensureClusterMemberDecommissionable(ctx, replicaID); err != nil {
+		return clusterMemberDecommissionResponse{}, fmt.Errorf("%w: %w", errClusterDecommissionBlocked, err)
+	}
+	if err := s.raft.RemoveReplica(ctx, replicaID); err != nil {
+		return clusterMemberDecommissionResponse{}, fmt.Errorf("remove decommissioned raft replica: %w", err)
+	}
+	if err := s.syncStorageNodes(ctx); err != nil {
+		return clusterMemberDecommissionResponse{}, fmt.Errorf("sync storage nodes after decommission: %w", err)
+	}
+	return clusterMemberDecommissionResponse{
+		ReplicaID: replicaID,
+		NodeID:    nodeID,
+		Objects:   rebalance.Objects,
+		Shards:    rebalance.Shards,
+		Status:    "decommissioned",
+	}, nil
+}
+
+// ValidateClusterMemberDecommission validates whether a non-local replica can be decommissioned.
+func ValidateClusterMemberDecommission(replicaID uint64, membership raftx.Membership) (bool, error) {
+	if replicaID == 0 {
+		return false, errors.New("replica_id must be greater than zero")
+	}
+	if replicaID == membership.LocalReplicaID {
+		return false, errCannotDecommissionLocalReplica
+	}
+	_, present := membership.Nodes[replicaID]
+	return present, nil
+}

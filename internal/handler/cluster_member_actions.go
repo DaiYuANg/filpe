@@ -21,6 +21,8 @@ func (s *Service) handleClusterMemberAction(w http.ResponseWriter, r *http.Reque
 		s.handleDrainClusterMember(w, r, id)
 	case "resume":
 		s.handleResumeClusterMember(w, r, id)
+	case "decommission":
+		s.handleDecommissionClusterMember(w, r, id)
 	case "replace":
 		s.handleReplaceClusterMember(w, r, id)
 	default:
