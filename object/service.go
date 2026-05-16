@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sync"
 
 	"github.com/arcgolabs/eventx"
 	"github.com/arcgolabs/mapper"
@@ -35,10 +36,12 @@ type PutOptions struct {
 }
 
 type Service struct {
-	logger *slog.Logger
-	store  *store.Store
-	search *index.SearchEngine
-	bus    eventx.BusRuntime
+	logger  *slog.Logger
+	store   *store.Store
+	search  *index.SearchEngine
+	bus     eventx.BusRuntime
+	indexMu sync.RWMutex
+	index   IndexStatus
 }
 
 func NewService(
@@ -153,6 +156,15 @@ func (s *Service) RebalanceNode(ctx context.Context, nodeID string) (RebalanceRe
 func (s *Service) Search(ctx context.Context, query SearchQuery) (SearchResult, error) {
 	_ = ctx
 	return s.search.Search(query), nil
+}
+
+func (s *Service) IndexStatus() IndexStatus {
+	if s == nil {
+		return IndexStatus{}
+	}
+	s.indexMu.RLock()
+	defer s.indexMu.RUnlock()
+	return s.index
 }
 
 func (s *Service) publishObjectEvent(ctx context.Context, eventType string, meta ObjectMeta) error {

@@ -23,6 +23,8 @@ const defaultClusterStorageNodesPath = "/_cluster/storage-nodes"
 const defaultClusterStorageNodesSyncPath = "/_cluster/storage-nodes/sync"
 const defaultDiscoveryPath = "/_cluster/discovery"
 const defaultRepairStatusPath = "/_repair/status"
+const defaultIndexStatusPath = "/_index/status"
+const defaultIndexRebuildPath = "/_index/rebuild"
 
 type Service struct {
 	logger *slog.Logger

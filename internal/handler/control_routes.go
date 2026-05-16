@@ -40,6 +40,8 @@ func (s *Service) handleNamedControlRoute(w http.ResponseWriter, r *http.Request
 		},
 		strings.Trim(defaultDiscoveryPath, "/"):    func() { s.handleDiscovery(w, r) },
 		strings.Trim(defaultRepairStatusPath, "/"): func() { s.handleRepairStatus(w, r) },
+		strings.Trim(defaultIndexStatusPath, "/"):  func() { s.handleIndexStatus(w, r) },
+		strings.Trim(defaultIndexRebuildPath, "/"): func() { s.handleIndexRebuild(w, r) },
 	}
 	if routeHandler, ok := routes[route]; ok {
 		routeHandler()
