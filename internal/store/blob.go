@@ -28,6 +28,7 @@ func (s *Store) prepareBlob(
 			Size:            ref.Size,
 			ShardDir:        ref.Path,
 			ShardPlacements: ref.ShardPlacements,
+			ShardChecksums:  ref.ShardChecksums,
 		}, true, false, nil
 	}
 	return s.createBlob(ctx, key, staged)
@@ -56,7 +57,7 @@ func (s *Store) retainBlob(
 	sameObjectBlob bool,
 ) (blobRefMutation, error) {
 	if !refExists {
-		if err := s.meta.CreateBlobRef(ctx, hash, blob.ShardDir, blob.Size, blob.ShardPlacements); err != nil {
+		if err := s.meta.CreateBlobRef(ctx, hash, blob.ShardDir, blob.Size, blob.ShardPlacements, blob.ShardChecksums); err != nil {
 			return blobRefUnchanged, mapStoreError(err)
 		}
 		return blobRefCreated, nil
@@ -100,10 +101,12 @@ func (s *Store) restorePreviousLayout(ctx context.Context, bucket, key string, e
 		return nil
 	}
 	_, err := s.engine.LinkObject(ctx, bucket, key, engine.BlobInfo{
-		Hash:     existing.meta.Hash,
-		ETag:     existing.meta.ETag,
-		Size:     existing.ref.Size,
-		ShardDir: existing.ref.Path,
+		Hash:            existing.meta.Hash,
+		ETag:            existing.meta.ETag,
+		Size:            existing.ref.Size,
+		ShardDir:        existing.ref.Path,
+		ShardPlacements: existing.ref.ShardPlacements,
+		ShardChecksums:  existing.ref.ShardChecksums,
 	}, existing.meta.ContentType, existing.meta.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("restore previous layout: %w", err)
@@ -163,5 +166,6 @@ func objectMetaFromInfo(info engine.ObjectInfo) model.ObjectMeta {
 		UpdatedAt:       info.UpdatedAt,
 		State:           model.ObjectStateCommitted,
 		ShardPlacements: info.ShardPlacements,
+		ShardChecksums:  info.ShardChecksums,
 	}
 }

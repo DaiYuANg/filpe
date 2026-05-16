@@ -19,6 +19,7 @@ type BlobInfo struct {
 	Size            int64
 	ShardDir        string
 	ShardPlacements []model.ShardPlacement
+	ShardChecksums  []string
 }
 
 func HashBytes(data []byte) string {
@@ -69,6 +70,7 @@ func (e *Engine) PutBlobBytes(ctx context.Context, key string, data []byte) (Blo
 	if err != nil {
 		return BlobInfo{}, err
 	}
+	checksums := shardChecksums(shards)
 	for i, shard := range shards {
 		if writeErr := e.writeShard(ctx, placements[i], shardDir, hash, i, shard); writeErr != nil {
 			return BlobInfo{}, fmt.Errorf("engine: write shard %d: %w", i, writeErr)
@@ -81,7 +83,16 @@ func (e *Engine) PutBlobBytes(ctx context.Context, key string, data []byte) (Blo
 		Size:            int64(len(data)),
 		ShardDir:        shardDir,
 		ShardPlacements: cloneShardPlacements(placements),
+		ShardChecksums:  cloneStrings(checksums),
 	}, nil
+}
+
+func shardChecksums(shards [][]byte) []string {
+	checksums := make([]string, len(shards))
+	for index, shard := range shards {
+		checksums[index] = HashBytes(shard)
+	}
+	return checksums
 }
 
 // DeleteBlob removes content shards for a blob once no objects reference it.

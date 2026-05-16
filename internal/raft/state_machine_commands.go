@@ -51,7 +51,7 @@ func (s *raftStateMachine) applyObjectCommand(cmd MetadataCommand) (MetadataResu
 func (s *raftStateMachine) applyBlobCommand(cmd MetadataCommand) (MetadataResult, string, bool) {
 	switch cmd.Type {
 	case MetadataCommandCreateBlobRef:
-		return MetadataResult{}, s.createBlobRef(cmd.Hash, cmd.Path, cmd.Size, cmd.ShardPlacements), true
+		return MetadataResult{}, s.createBlobRef(cmd.Hash, cmd.Path, cmd.Size, cmd.ShardPlacements, cmd.ShardChecksums), true
 	case MetadataCommandIncreaseBlobRef:
 		return MetadataResult{}, s.increaseBlobRef(cmd.Hash), true
 	case MetadataCommandDecreaseBlobRef:
@@ -202,7 +202,13 @@ func (s *raftStateMachine) deleteObjectMeta(bucket, key string) (MetadataResult,
 	return MetadataResult{Object: meta, ObjectExists: true}, ""
 }
 
-func (s *raftStateMachine) createBlobRef(hash, path string, size int64, shardPlacements []model.ShardPlacement) string {
+func (s *raftStateMachine) createBlobRef(
+	hash string,
+	path string,
+	size int64,
+	shardPlacements []model.ShardPlacement,
+	shardChecksums []string,
+) string {
 	if invalidName(hash) || strings.TrimSpace(path) == "" {
 		return MetadataErrorBadRequest
 	}
@@ -214,6 +220,7 @@ func (s *raftStateMachine) createBlobRef(hash, path string, size int64, shardPla
 	s.blobRefs[hash] = MetadataBlobRef{
 		Path:            path,
 		ShardPlacements: cloneRaftBlobPlacements(shardPlacements),
+		ShardChecksums:  cloneRaftBlobChecksums(shardChecksums),
 		RefCount:        1,
 		Size:            size,
 	}

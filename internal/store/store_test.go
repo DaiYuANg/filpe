@@ -26,11 +26,13 @@ func TestStorePutObjectDedupePreservesBlobRefPlacements(t *testing.T) {
 
 	mustEqual(t, first.Hash, second.Hash, "hashes must match")
 	mustDeepEqual(t, first.ShardPlacements, second.ShardPlacements, "shard placements should match across objects")
+	mustDeepEqual(t, first.ShardChecksums, second.ShardChecksums, "shard checksums should match across objects")
 
 	ref, _, err := meta.GetBlobRef(ctx, first.Hash)
 	mustNoError(t, err, "get blob ref")
 	mustEqual(t, ref.RefCount, 2, "blob ref count should be increased")
 	mustDeepEqual(t, ref.ShardPlacements, first.ShardPlacements, "blob ref should keep shard placements")
+	mustDeepEqual(t, ref.ShardChecksums, first.ShardChecksums, "blob ref should keep shard checksums")
 }
 
 func mustNoError(t *testing.T, err error, format string) {

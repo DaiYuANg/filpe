@@ -167,13 +167,7 @@ func (s *objectLayoutScanner) normalize(layout *Layout) {
 }
 
 func (e *Engine) canRebuild(ctx context.Context, layout *Layout) bool {
-	total := e.coder.TotalChunks()
-	available := 0
-	for i := range total {
-		if e.shardExists(ctx, layout, i) {
-			available++
-		}
-	}
+	available := e.countReadableShards(ctx, layout)
 	return available >= e.dataChunks
 }
 
@@ -182,7 +176,7 @@ func (e *Engine) rebuildShards(ctx context.Context, layout *Layout) error {
 	shards := make([][]byte, total)
 
 	for i := range total {
-		data, err := e.readShard(ctx, layout, i)
+		data, err := e.readShardForRecovery(ctx, layout, i)
 		if err != nil {
 			return fmt.Errorf("engine: read shard for rebuild: %w", err)
 		}
@@ -211,7 +205,7 @@ func (e *Engine) readAvailableShards(ctx context.Context, layout *Layout) ([][]b
 	shards := make([][]byte, total)
 	available := 0
 	for i := range total {
-		data, err := e.readShard(ctx, layout, i)
+		data, err := e.readShardForRecovery(ctx, layout, i)
 		if err != nil {
 			return nil, 0, fmt.Errorf("engine: read shard %d: %w", i, err)
 		}
@@ -251,7 +245,7 @@ func (e *Engine) fillMissingShards(ctx context.Context, layout *Layout, shards [
 			available++
 			continue
 		}
-		data, err := e.readShard(ctx, layout, i)
+		data, err := e.readShardForRecovery(ctx, layout, i)
 		if err != nil {
 			return 0, fmt.Errorf("engine: re-read shard %d: %w", i, err)
 		}
@@ -279,6 +273,7 @@ func (e *Engine) objectInfoFromLayout(layout *Layout) ObjectInfo {
 			ContentType:     layout.ContentType,
 			UpdatedAt:       updatedAt,
 			ShardPlacements: cloneShardPlacements(layout.ShardPlacements),
+			ShardChecksums:  cloneStrings(layout.ShardChecksums),
 		},
 		DataChunks:   e.dataChunks,
 		ParityChunks: e.parityChunks,

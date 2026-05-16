@@ -17,6 +17,7 @@ type Layout struct {
 	Hash            string
 	Shards          []Shard
 	ShardPlacements []model.ShardPlacement
+	ShardChecksums  []string
 	Bucket          string
 	Key             string
 	Size            int64
@@ -46,4 +47,13 @@ func makeShardDir(prefix string) string {
 		return strings.ToLower(prefix)
 	}
 	return strings.ToLower(prefix[:2])
+}
+
+func cloneStrings(input []string) []string {
+	if len(input) == 0 {
+		return nil
+	}
+	output := make([]string, len(input))
+	copy(output, input)
+	return output
 }

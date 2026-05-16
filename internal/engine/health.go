@@ -1,12 +1,26 @@
 package engine
 
-import "context"
+import (
+	"context"
+	"errors"
+	"os"
+)
 
 func (e *Engine) healthFromLayout(ctx context.Context, layout *Layout) Health {
 	total := e.coder.TotalChunks()
 	available := 0
+	missing := 0
+	corrupted := 0
 	for i := range total {
-		if e.shardExists(ctx, layout, i) {
+		data, err := e.readShard(ctx, layout, i)
+		switch {
+		case errors.Is(err, ErrShardCorrupted):
+			corrupted++
+		case errors.Is(err, os.ErrNotExist):
+			missing++
+		case err != nil || data == nil:
+			missing++
+		default:
 			available++
 		}
 	}
@@ -16,7 +30,8 @@ func (e *Engine) healthFromLayout(ctx context.Context, layout *Layout) Health {
 		Key:         layout.Key,
 		TotalChunks: total,
 		Available:   available,
-		Missing:     total - available,
+		Missing:     missing,
+		Corrupted:   corrupted,
 		Recoverable: available >= e.dataChunks,
 	}
 }

@@ -23,6 +23,7 @@ var (
 type BlobRef struct {
 	Path            string
 	ShardPlacements []model.ShardPlacement
+	ShardChecksums  []string
 	RefCount        int
 	Size            int64
 }
@@ -42,7 +43,7 @@ type MetadataStore interface {
 	DeleteObjectMeta(ctx context.Context, bucket, key string) (model.ObjectMeta, bool, error)
 
 	GetBlobRef(ctx context.Context, hash string) (BlobRef, bool, error)
-	CreateBlobRef(ctx context.Context, hash, path string, size int64, placements []model.ShardPlacement) error
+	CreateBlobRef(ctx context.Context, hash, path string, size int64, placements []model.ShardPlacement, checksums []string) error
 	IncreaseBlobRef(ctx context.Context, hash string) error
 	DecreaseBlobRef(ctx context.Context, hash string) (string, bool, error)
 }
@@ -233,60 +234,6 @@ func (m *InMemoryMetadata) DeleteObjectMeta(_ context.Context, bucket, key strin
 		delete(keys, key)
 	}
 	return meta, true, nil
-}
-
-func (m *InMemoryMetadata) GetBlobRef(_ context.Context, hash string) (BlobRef, bool, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	ref, ok := m.blobs[hash]
-	return ref, ok, nil
-}
-
-func (m *InMemoryMetadata) CreateBlobRef(_ context.Context, hash, path string, size int64, placements []model.ShardPlacement) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if _, ok := m.blobs[hash]; ok {
-		return nil
-	}
-	m.blobs[hash] = BlobRef{
-		Path:            path,
-		ShardPlacements: cloneBlobRefPlacements(placements),
-		RefCount:        1,
-		Size:            size,
-	}
-	return nil
-}
-
-func (m *InMemoryMetadata) IncreaseBlobRef(_ context.Context, hash string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	ref, ok := m.blobs[hash]
-	if !ok {
-		return ErrObjectNotFound
-	}
-	ref.RefCount++
-	m.blobs[hash] = ref
-	return nil
-}
-
-func (m *InMemoryMetadata) DecreaseBlobRef(_ context.Context, hash string) (string, bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.decreaseBlobRefLocked(hash)
-}
-
-func (m *InMemoryMetadata) decreaseBlobRefLocked(hash string) (string, bool, error) {
-	ref, ok := m.blobs[hash]
-	if !ok {
-		return "", false, ErrObjectNotFound
-	}
-	ref.RefCount--
-	if ref.RefCount <= 0 {
-		delete(m.blobs, hash)
-		return ref.Path, true, nil
-	}
-	m.blobs[hash] = ref
-	return ref.Path, false, nil
 }
 
 func objectID(bucket, key string) string {

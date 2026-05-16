@@ -98,3 +98,12 @@ func copyBlobRefMap(input map[string]MetadataBlobRef) map[string]MetadataBlobRef
 	maps.Copy(output, input)
 	return output
 }
+
+func cloneRaftBlobChecksums(checksums []string) []string {
+	if len(checksums) == 0 {
+		return nil
+	}
+	output := make([]string, len(checksums))
+	copy(output, checksums)
+	return output
+}

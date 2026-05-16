@@ -22,7 +22,7 @@ func (e *Engine) RepairObject(ctx context.Context, bucket, key string) (RepairRe
 
 	before := e.healthFromLayout(ctx, layout)
 	result := RepairResult{HealthBefore: before}
-	if before.Missing == 0 {
+	if before.Missing == 0 && before.Corrupted == 0 {
 		result.HealthAfter = before
 		return result, nil
 	}
@@ -53,6 +53,10 @@ func (e *Engine) readRepairShards(ctx context.Context, layout *Layout) ([][]byte
 	for i := range total {
 		data, err := e.readShard(ctx, layout, i)
 		if err != nil {
+			if isUnavailableShardError(err) {
+				missing = append(missing, i)
+				continue
+			}
 			return nil, nil, fmt.Errorf("engine: read shard %d for repair: %w", i, err)
 		}
 		if data == nil {

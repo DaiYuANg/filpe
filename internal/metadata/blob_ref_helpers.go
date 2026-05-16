@@ -10,3 +10,12 @@ func cloneBlobRefPlacements(input []model.ShardPlacement) []model.ShardPlacement
 	copy(output, input)
 	return output
 }
+
+func cloneStrings(input []string) []string {
+	if len(input) == 0 {
+		return nil
+	}
+	output := make([]string, len(input))
+	copy(output, input)
+	return output
+}

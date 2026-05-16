@@ -115,16 +115,25 @@ func (e *Engine) readShard(ctx context.Context, layout *Layout, index int) ([]by
 	if err != nil {
 		return nil, fmt.Errorf("read shard from node %q: %w", node.ID(), err)
 	}
+	if err := verifyShardChecksum(layout, index, data); err != nil {
+		return nil, fmt.Errorf("verify shard from node %q: %w", node.ID(), err)
+	}
 	return data, nil
 }
 
-func (e *Engine) shardExists(ctx context.Context, layout *Layout, index int) bool {
-	placement := e.shardPlacement(layout, index)
-	node, err := e.storageNode(placement)
-	if err != nil {
-		return false
+func verifyShardChecksum(layout *Layout, index int, data []byte) error {
+	if data == nil || layout == nil || index < 0 || index >= len(layout.ShardChecksums) {
+		return nil
 	}
-	return node.ShardExists(ctx, layout.ShardDir, layout.Hash, index)
+	expected := strings.TrimSpace(layout.ShardChecksums[index])
+	if expected == "" {
+		return nil
+	}
+	actual := HashBytes(data)
+	if actual != expected {
+		return fmt.Errorf("%w: index=%d expected=%s actual=%s", ErrShardCorrupted, index, expected, actual)
+	}
+	return nil
 }
 
 func (e *Engine) storageNode(placement model.ShardPlacement) (StorageNode, error) {

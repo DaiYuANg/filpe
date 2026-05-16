@@ -48,6 +48,7 @@ type ObjectMeta struct {
 	ContentType     string                 `json:"content_type"`
 	UpdatedAt       time.Time              `json:"updated_at"`
 	ShardPlacements []model.ShardPlacement `json:"shard_placements,omitempty"`
+	ShardChecksums  []string               `json:"shard_checksums,omitempty"`
 }
 
 // ObjectInfo is ObjectMeta + erasure coding info.
@@ -67,6 +68,7 @@ type Health struct {
 	TotalChunks int    `json:"total_chunks"`
 	Available   int    `json:"available"`
 	Missing     int    `json:"missing"`
+	Corrupted   int    `json:"corrupted"`
 	Recoverable bool   `json:"recoverable"`
 }
 
@@ -79,6 +81,9 @@ var ErrObjectNotFound = errors.New("engine: object not found")
 
 // ErrShardRecoveryFailed is returned when shard recovery fails.
 var ErrShardRecoveryFailed = errors.New("engine: shard recovery failed")
+
+// ErrShardCorrupted is returned when shard content does not match layout metadata.
+var ErrShardCorrupted = errors.New("engine: shard corrupted")
 
 func NewEngine(dataDir string, dataChunks, parityChunks int, fs afero.Fs) (*Engine, error) {
 	if dataChunks < 1 {
@@ -170,6 +175,7 @@ func (e *Engine) LinkObject(
 		ShardDir:        blob.ShardDir,
 		Hash:            blob.Hash,
 		ShardPlacements: e.resolveBlobPlacements(ctx, bucket, key, blob),
+		ShardChecksums:  cloneStrings(blob.ShardChecksums),
 		Bucket:          bucket,
 		Key:             key,
 		Size:            blob.Size,
@@ -203,6 +209,7 @@ func (e *Engine) LinkObject(
 			ContentType:     contentType,
 			UpdatedAt:       updatedAt,
 			ShardPlacements: cloneShardPlacements(layout.ShardPlacements),
+			ShardChecksums:  cloneStrings(layout.ShardChecksums),
 		},
 		DataChunks:   e.dataChunks,
 		ParityChunks: e.parityChunks,

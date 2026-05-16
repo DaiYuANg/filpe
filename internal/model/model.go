@@ -30,6 +30,7 @@ type ObjectMeta struct {
 	UpdatedAt       time.Time        `json:"updated_at"`
 	State           string           `json:"state,omitempty"`
 	ShardPlacements []ShardPlacement `json:"shard_placements,omitempty"`
+	ShardChecksums  []string         `json:"shard_checksums,omitempty"`
 }
 
 type SearchQuery struct {
