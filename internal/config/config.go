@@ -20,6 +20,7 @@ type Config struct {
 	HTTPAddress            string `json:"http_address"             koanf:"http_address"             validate:"required,min=1"`
 	StorageAddress         string `json:"storage_address"          koanf:"storage_address"`
 	AdminToken             string `json:"admin_token"              koanf:"admin_token"`
+	APIToken               string `json:"api_token"                koanf:"api_token"`
 	DataDir                string `json:"data_dir"                 koanf:"data_dir"                 validate:"required,min=1"`
 	LogLevel               string `json:"log_level"                koanf:"log_level"                validate:"required,oneof=debug info warn error"`
 	RaftNodeID             uint64 `json:"raft_node_id"             koanf:"raft_node_id"`
@@ -147,6 +148,7 @@ func trim(cfg Config) Config {
 	cfg.HTTPAddress = strings.TrimSpace(cfg.HTTPAddress)
 	cfg.StorageAddress = strings.TrimSpace(cfg.StorageAddress)
 	cfg.AdminToken = strings.TrimSpace(cfg.AdminToken)
+	cfg.APIToken = strings.TrimSpace(cfg.APIToken)
 	cfg.LogLevel = strings.TrimSpace(cfg.LogLevel)
 	cfg.RaftAddress = strings.TrimSpace(cfg.RaftAddress)
 	cfg.RaftDataDir = strings.TrimSpace(cfg.RaftDataDir)

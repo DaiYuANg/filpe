@@ -49,6 +49,20 @@ func TestAdminAuthDoesNotProtectHealth(t *testing.T) {
 	}
 }
 
+func TestAPIAuthProtectsObjectRoutes(t *testing.T) {
+	recorder := serveHandlerGet(t, config.Config{APIToken: "api-secret"}, "/bucket", nil)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestAPIAuthDoesNotProtectReadiness(t *testing.T) {
+	recorder := serveHandlerGet(t, config.Config{APIToken: "api-secret"}, "/readyz", nil)
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
+	}
+}
+
 func serveHandlerGet(
 	t *testing.T,
 	cfg config.Config,

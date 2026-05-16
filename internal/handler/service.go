@@ -51,6 +51,10 @@ func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		s.writeUnauthorized(w)
 		return
 	}
+	if s.requiresAPIAuth(route, parts) && !s.authorizeAPI(r) {
+		s.writeUnauthorized(w)
+		return
+	}
 
 	if s.handleControlRoute(w, r, route, parts) {
 		return

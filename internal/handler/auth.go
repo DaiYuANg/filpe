@@ -26,6 +26,16 @@ func (s *Service) requiresAdminAuth(route string, parts []string) bool {
 	}
 }
 
+func (s *Service) requiresAPIAuth(route string, parts []string) bool {
+	if strings.TrimSpace(s.cfg.APIToken) == "" || s.requiresAdminAuth(route, parts) {
+		return false
+	}
+	if isHealthRoute(route) || isReadinessRoute(route) {
+		return false
+	}
+	return true
+}
+
 func (s *Service) authorizeAdmin(r *http.Request) bool {
 	token := strings.TrimSpace(s.cfg.AdminToken)
 	if token == "" {
@@ -36,6 +46,22 @@ func (s *Service) authorizeAdmin(r *http.Request) bool {
 		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(provided), []byte(token)) == 1
+}
+
+func (s *Service) authorizeAPI(r *http.Request) bool {
+	token := strings.TrimSpace(s.cfg.APIToken)
+	if token == "" {
+		return true
+	}
+	provided := apiCredentialFromRequest(r)
+	if provided == "" {
+		return false
+	}
+	if subtle.ConstantTimeCompare([]byte(provided), []byte(token)) == 1 {
+		return true
+	}
+	adminToken := strings.TrimSpace(s.cfg.AdminToken)
+	return adminToken != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(adminToken)) == 1
 }
 
 func adminTokenFromRequest(r *http.Request) string {
@@ -50,6 +76,16 @@ func adminTokenFromRequest(r *http.Request) string {
 		return strings.TrimSpace(auth[len("bearer "):])
 	}
 	return ""
+}
+
+func apiCredentialFromRequest(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if value := strings.TrimSpace(r.Header.Get("X-Maxio-API")); value != "" {
+		return value
+	}
+	return adminTokenFromRequest(r)
 }
 
 func (s *Service) writeUnauthorized(w http.ResponseWriter) {

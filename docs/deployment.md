@@ -22,6 +22,7 @@ Start the server with the default config path:
 ## Admin protection
 
 Set `admin_token` or `MAXIO_ADMIN_TOKEN` to protect management and internal shard APIs.
+Set `api_token` or `MAXIO_API_TOKEN` to protect bucket and object APIs.
 
 Authenticated requests can use either header:
 
@@ -39,6 +40,15 @@ Protected paths include:
 /_search
 /metrics
 ```
+
+When `api_token` is configured, bucket and object routes also require either:
+
+```sh
+Authorization: Bearer <api-token>
+X-Maxio-API: <api-token>
+```
+
+The admin token is also accepted for bucket and object routes.
 
 `/healthz` and `/readyz` remain unauthenticated for load balancers.
 
