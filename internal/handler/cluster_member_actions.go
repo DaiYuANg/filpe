@@ -21,6 +21,8 @@ func (s *Service) handleClusterMemberAction(w http.ResponseWriter, r *http.Reque
 		s.handleDrainClusterMember(w, id)
 	case "resume":
 		s.handleResumeClusterMember(w, id)
+	case "replace":
+		s.handleReplaceClusterMember(w, r, id)
 	default:
 		http.NotFound(w, r)
 	}
