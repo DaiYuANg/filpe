@@ -1,21 +1,24 @@
 package s3
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/hex"
 	"errors"
 	"net/http"
-	"net/url"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const (
 	sigV4Algorithm = "AWS4-HMAC-SHA256"
 	sigV4Request   = "aws4_request"
 	s3ServiceName  = "s3"
+	sigV4TimeFmt   = "20060102T150405Z"
+)
+
+const (
+	sigV4ClockSkew          = 15 * time.Minute
+	sigV4PresignMaxLifetime = 7 * 24 * time.Hour
 )
 
 var (
@@ -42,6 +45,13 @@ func (s *Service) authorize(r *http.Request) error {
 		return err
 	}
 
+	if isSigV4PresignedRequest(r) {
+		return s.authorizePresigned(r, accessKey, signingSecret)
+	}
+	return s.authorizeHeader(r, accessKey, signingSecret)
+}
+
+func (s *Service) authorizeHeader(r *http.Request, accessKey, signingSecret string) error {
 	auth, err := parseSigV4Authorization(r.Header.Get("Authorization"))
 	if err != nil {
 		return err
@@ -59,6 +69,21 @@ func (s *Service) authorize(r *http.Request) error {
 		return errSigV4AccessDenied
 	}
 
+	return nil
+}
+
+func (s *Service) authorizePresigned(r *http.Request, accessKey, signingSecret string) error {
+	auth, amzDate, err := parseSigV4Presigned(r)
+	if err != nil {
+		return err
+	}
+	validateErr := s.validateSigV4Authorization(auth, accessKey)
+	if validateErr != nil {
+		return validateErr
+	}
+	if !validSigV4PresignedSignature(r, auth, signingSecret, amzDate) {
+		return errSigV4AccessDenied
+	}
 	return nil
 }
 
@@ -97,17 +122,9 @@ func sigV4RequestDate(r *http.Request, credentialDate string) (string, error) {
 	return amzDate, nil
 }
 
-func validSigV4Signature(r *http.Request, auth sigV4Authorization, signingSecret, amzDate string) bool {
-	canonicalRequest := canonicalSigV4Request(r, auth.signedHeaders)
-	credentialScope := strings.Join([]string{auth.date, auth.region, auth.service, sigV4Request}, "/")
-	stringToSign := strings.Join([]string{
-		sigV4Algorithm,
-		amzDate,
-		credentialScope,
-		sha256Hex(canonicalRequest),
-	}, "\n")
-	expected := sigV4Signature(signingSecret, auth.date, auth.region, auth.service, stringToSign)
-	return subtle.ConstantTimeCompare([]byte(expected), []byte(strings.ToLower(auth.signature))) == 1
+func isSigV4PresignedRequest(r *http.Request) bool {
+	values := r.URL.Query()
+	return values.Get("X-Amz-Algorithm") == sigV4Algorithm || values.Get("X-Amz-Signature") != ""
 }
 
 func parseSigV4Authorization(header string) (sigV4Authorization, error) {
@@ -123,10 +140,40 @@ func parseSigV4Authorization(header string) (sigV4Authorization, error) {
 	credential := values["Credential"]
 	signedHeaders := values["SignedHeaders"]
 	signature := values["Signature"]
+	return newSigV4Authorization(credential, signedHeaders, signature)
+}
+
+func parseSigV4Presigned(r *http.Request) (sigV4Authorization, string, error) {
+	values := r.URL.Query()
+	if values.Get("X-Amz-Algorithm") != sigV4Algorithm {
+		return sigV4Authorization{}, "", errSigV4InvalidHeader
+	}
+	amzDate := strings.TrimSpace(values.Get("X-Amz-Date"))
+	if amzDate == "" {
+		return sigV4Authorization{}, "", errSigV4MissingDate
+	}
+	if err := validateSigV4PresignedLifetime(amzDate, values.Get("X-Amz-Expires")); err != nil {
+		return sigV4Authorization{}, "", err
+	}
+
+	auth, err := newSigV4Authorization(
+		values.Get("X-Amz-Credential"),
+		values.Get("X-Amz-SignedHeaders"),
+		values.Get("X-Amz-Signature"),
+	)
+	if err != nil {
+		return sigV4Authorization{}, "", err
+	}
+	if !strings.HasPrefix(amzDate, auth.date) {
+		return sigV4Authorization{}, "", errSigV4MissingDate
+	}
+	return auth, amzDate, nil
+}
+
+func newSigV4Authorization(credential, signedHeaders, signature string) (sigV4Authorization, error) {
 	if credential == "" || signedHeaders == "" || signature == "" {
 		return sigV4Authorization{}, errSigV4InvalidHeader
 	}
-
 	parts := strings.Split(credential, "/")
 	if len(parts) != 5 || parts[4] != sigV4Request {
 		return sigV4Authorization{}, errSigV4InvalidHeader
@@ -145,6 +192,26 @@ func parseSigV4Authorization(header string) (sigV4Authorization, error) {
 		signedHeaders: headers,
 		signature:     signature,
 	}, nil
+}
+
+func validateSigV4PresignedLifetime(amzDate, expires string) error {
+	signedAt, err := time.Parse(sigV4TimeFmt, amzDate)
+	if err != nil {
+		return errSigV4InvalidHeader
+	}
+	seconds, err := strconv.ParseInt(strings.TrimSpace(expires), 10, 64)
+	if err != nil || seconds < 0 {
+		return errSigV4InvalidHeader
+	}
+	lifetime := time.Duration(seconds) * time.Second
+	if lifetime > sigV4PresignMaxLifetime {
+		return errSigV4InvalidHeader
+	}
+	now := time.Now().UTC()
+	if now.Before(signedAt.Add(-sigV4ClockSkew)) || now.After(signedAt.Add(lifetime)) {
+		return errSigV4AccessDenied
+	}
+	return nil
 }
 
 func parseAuthorizationValues(input string) map[string]string {
@@ -175,90 +242,4 @@ func parseSignedHeaders(input string) []string {
 	}
 	sort.Strings(headers)
 	return headers
-}
-
-func canonicalSigV4Request(r *http.Request, signedHeaders []string) string {
-	headers := make([]string, 0, len(signedHeaders))
-	for _, header := range signedHeaders {
-		headers = append(headers, header+":"+canonicalSigV4HeaderValue(r, header))
-	}
-
-	return strings.Join([]string{
-		r.Method,
-		canonicalSigV4URI(r),
-		canonicalSigV4Query(r.URL.Query()),
-		strings.Join(headers, "\n") + "\n",
-		strings.Join(signedHeaders, ";"),
-		payloadHash(r),
-	}, "\n")
-}
-
-func canonicalSigV4URI(r *http.Request) string {
-	path := r.URL.EscapedPath()
-	if path == "" {
-		return "/"
-	}
-	return path
-}
-
-func canonicalSigV4Query(values url.Values) string {
-	if len(values) == 0 {
-		return ""
-	}
-
-	pairs := make([]string, 0, len(values))
-	for key, items := range values {
-		if len(items) == 0 {
-			pairs = append(pairs, sigV4Escape(key)+"=")
-			continue
-		}
-		for _, value := range items {
-			pairs = append(pairs, sigV4Escape(key)+"="+sigV4Escape(value))
-		}
-	}
-	sort.Strings(pairs)
-	return strings.Join(pairs, "&")
-}
-
-func canonicalSigV4HeaderValue(r *http.Request, header string) string {
-	if header == "host" {
-		return strings.ToLower(strings.TrimSpace(r.Host))
-	}
-	return strings.Join(strings.Fields(strings.Join(r.Header.Values(header), ",")), " ")
-}
-
-func payloadHash(r *http.Request) string {
-	hash := strings.TrimSpace(r.Header.Get("X-Amz-Content-Sha256"))
-	if hash == "" {
-		return "UNSIGNED-PAYLOAD"
-	}
-	return hash
-}
-
-func sigV4Escape(value string) string {
-	escaped := url.QueryEscape(value)
-	escaped = strings.ReplaceAll(escaped, "+", "%20")
-	escaped = strings.ReplaceAll(escaped, "%7E", "~")
-	return escaped
-}
-
-func sigV4Signature(signingSecret, date, region, service, stringToSign string) string {
-	dateKey := hmacSHA256([]byte("AWS4"+signingSecret), date)
-	regionKey := hmacSHA256(dateKey, region)
-	serviceKey := hmacSHA256(regionKey, service)
-	signingKey := hmacSHA256(serviceKey, sigV4Request)
-	return hex.EncodeToString(hmacSHA256(signingKey, stringToSign))
-}
-
-func hmacSHA256(key []byte, data string) []byte {
-	mac := hmac.New(sha256.New, key)
-	if _, err := mac.Write([]byte(data)); err != nil {
-		return nil
-	}
-	return mac.Sum(nil)
-}
-
-func sha256Hex(value string) string {
-	sum := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(sum[:])
 }
