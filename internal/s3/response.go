@@ -53,6 +53,7 @@ func mapError(err error) (int, string) {
 func writeObjectHeaders(w http.ResponseWriter, meta object.ObjectMeta) {
 	w.Header().Set("ETag", meta.ETag)
 	w.Header().Set("Content-Length", strconv.FormatInt(meta.Size, 10))
+	w.Header().Set("Accept-Ranges", "bytes")
 	w.Header().Set("Last-Modified", meta.UpdatedAt.UTC().Format(http.TimeFormat))
 	if meta.ContentType != "" {
 		w.Header().Set("Content-Type", meta.ContentType)

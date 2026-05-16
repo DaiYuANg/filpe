@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 
@@ -25,6 +24,7 @@ type httpxObjectInput struct {
 	Bucket      string `path:"bucket"`
 	Key         string `path:"key"`
 	ContentType string `header:"Content-Type"`
+	Range       string `header:"Range"`
 	Payload     httpx.RequestStream
 }
 
@@ -33,6 +33,8 @@ type httpxOutput struct {
 	RequestID     string `header:"x-amz-request-id"`
 	ContentType   string `header:"Content-Type"`
 	ContentLength string `header:"Content-Length"`
+	ContentRange  string `header:"Content-Range"`
+	AcceptRanges  string `header:"Accept-Ranges"`
 	LastModified  string `header:"Last-Modified"`
 	ETag          string `header:"ETag"`
 	Location      string `header:"Location"`
@@ -178,18 +180,7 @@ func (s *Service) getObjectHTTPX(ctx context.Context, input *httpxObjectInput) (
 		return s.mappedErrorHTTPX(err)
 	}
 
-	out := s.objectHeadersHTTPX(http.StatusOK, meta)
-	out.Body = httpx.StreamWriter(func(writer io.Writer) {
-		defer func() {
-			if closeErr := body.Close(); closeErr != nil {
-				s.logger.WarnContext(ctx, "close s3 object body failed", "error", closeErr)
-			}
-		}()
-		if _, copyErr := io.Copy(writer, body); copyErr != nil {
-			s.logger.WarnContext(ctx, "copy s3 object body failed", "error", copyErr)
-		}
-	})
-	return out, nil
+	return s.rangedObjectHTTPX(ctx, input.Range, body, meta)
 }
 
 func (s *Service) putObjectHTTPX(ctx context.Context, input *httpxObjectInput) (*httpxOutput, error) {
@@ -250,6 +241,7 @@ func (s *Service) objectHeadersHTTPX(status int, meta object.ObjectMeta) *httpxO
 	out := s.emptyHTTPX(status)
 	out.ETag = meta.ETag
 	out.ContentLength = strconv.FormatInt(meta.Size, 10)
+	out.AcceptRanges = "bytes"
 	out.LastModified = meta.UpdatedAt.UTC().Format(http.TimeFormat)
 	if meta.ContentType != "" {
 		out.ContentType = meta.ContentType

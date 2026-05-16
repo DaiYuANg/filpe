@@ -1,8 +1,6 @@
 package s3
 
 import (
-	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -194,18 +192,7 @@ func (s *Service) handleGetObject(w http.ResponseWriter, r *http.Request, bucket
 		s.writeMappedError(w, err)
 		return
 	}
-	reqCtx := r.Context()
-	defer func(ctx context.Context) {
-		if closeErr := body.Close(); closeErr != nil {
-			s.logger.WarnContext(ctx, "close s3 object body failed", "error", closeErr)
-		}
-	}(reqCtx)
-
-	writeObjectHeaders(w, meta)
-	w.WriteHeader(http.StatusOK)
-	if _, err := io.Copy(w, body); err != nil {
-		s.logger.WarnContext(reqCtx, "copy s3 object body failed", "error", err)
-	}
+	s.writeRangedObject(w, r, body, meta)
 }
 
 func (s *Service) handlePutObject(w http.ResponseWriter, r *http.Request, bucket, key string) {

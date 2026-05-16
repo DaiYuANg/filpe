@@ -1,10 +1,8 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"path"
@@ -150,17 +148,7 @@ func (s *Service) handleGetObject(w http.ResponseWriter, r *http.Request, bucket
 		s.writeError(w, err)
 		return
 	}
-	reqCtx := r.Context()
-	defer func(ctx context.Context) {
-		if closeErr := body.Close(); closeErr != nil {
-			s.logger.WarnContext(ctx, "close object body failed", "error", closeErr)
-		}
-	}(reqCtx)
-	writeObjectHeaders(w, meta)
-	w.WriteHeader(http.StatusOK)
-	if _, copyErr := io.Copy(w, body); copyErr != nil {
-		s.logger.WarnContext(reqCtx, "copy object body failed", "error", copyErr)
-	}
+	s.writeGetObjectResponse(w, r, body, meta)
 }
 
 func (s *Service) handleHeadObject(w http.ResponseWriter, r *http.Request, bucket, key string) {
@@ -264,4 +252,5 @@ func writeObjectHeaders(w http.ResponseWriter, meta object.ObjectMeta) {
 	w.Header().Set("ETag", meta.ETag)
 	w.Header().Set("Content-Type", contentTypeOrDefault(meta.ContentType))
 	w.Header().Set("Content-Length", formatInt(meta.Size))
+	w.Header().Set("Accept-Ranges", "bytes")
 }
