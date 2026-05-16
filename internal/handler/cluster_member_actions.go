@@ -18,9 +18,9 @@ func (s *Service) handleClusterMemberAction(w http.ResponseWriter, r *http.Reque
 	}
 	switch action {
 	case "drain":
-		s.handleDrainClusterMember(w, id)
+		s.handleDrainClusterMember(w, r, id)
 	case "resume":
-		s.handleResumeClusterMember(w, id)
+		s.handleResumeClusterMember(w, r, id)
 	case "replace":
 		s.handleReplaceClusterMember(w, r, id)
 	default:
@@ -28,7 +28,7 @@ func (s *Service) handleClusterMemberAction(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-func (s *Service) handleDrainClusterMember(w http.ResponseWriter, replicaID uint64) {
+func (s *Service) handleDrainClusterMember(w http.ResponseWriter, r *http.Request, replicaID uint64) {
 	if s.engine == nil {
 		s.writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "storage engine unavailable"})
 		return
@@ -38,6 +38,7 @@ func (s *Service) handleDrainClusterMember(w http.ResponseWriter, replicaID uint
 		s.writeError(w, err)
 		return
 	}
+	s.auditHTTP(r, "cluster.member.drain", "replica_id", replicaID, "node_id", nodeID)
 	s.writeJSON(w, http.StatusAccepted, map[string]any{
 		"replica_id": replicaID,
 		"node_id":    nodeID,
@@ -45,7 +46,7 @@ func (s *Service) handleDrainClusterMember(w http.ResponseWriter, replicaID uint
 	})
 }
 
-func (s *Service) handleResumeClusterMember(w http.ResponseWriter, replicaID uint64) {
+func (s *Service) handleResumeClusterMember(w http.ResponseWriter, r *http.Request, replicaID uint64) {
 	if s.engine == nil {
 		s.writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "storage engine unavailable"})
 		return
@@ -55,6 +56,7 @@ func (s *Service) handleResumeClusterMember(w http.ResponseWriter, replicaID uin
 		s.writeError(w, err)
 		return
 	}
+	s.auditHTTP(r, "cluster.member.resume", "replica_id", replicaID, "node_id", nodeID)
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"replica_id": replicaID,
 		"node_id":    nodeID,

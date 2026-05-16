@@ -63,6 +63,7 @@ func (s *Service) handleClusterBootstrap(w http.ResponseWriter, r *http.Request)
 		s.writeError(w, err)
 		return
 	}
+	s.auditHTTP(r, "cluster.bootstrap", "members", len(req.Nodes))
 	s.writeJSON(w, http.StatusOK, result)
 }
 
@@ -104,6 +105,7 @@ func (s *Service) handleClusterJoin(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
+	s.auditHTTP(r, "cluster.member.join", "replica_id", req.ReplicaID, "target", req.Target)
 	s.writeJSON(w, http.StatusAccepted, map[string]any{
 		"replica_id": req.ReplicaID,
 		"target":     req.Target,
@@ -153,6 +155,7 @@ func (s *Service) handleAddClusterMember(w http.ResponseWriter, r *http.Request)
 		s.writeError(w, err)
 		return
 	}
+	s.auditHTTP(r, "cluster.member.add", "replica_id", req.ReplicaID, "target", req.Target)
 	s.writeJSON(w, http.StatusAccepted, map[string]any{
 		"replica_id": req.ReplicaID,
 		"target":     req.Target,
@@ -175,6 +178,7 @@ func (s *Service) handleSyncClusterMembers(w http.ResponseWriter, r *http.Reques
 		s.writeError(w, err)
 		return
 	}
+	s.auditHTTP(r, "cluster.members.sync", "members", len(req.Nodes))
 	s.writeJSON(w, http.StatusOK, result)
 }
 
@@ -215,6 +219,7 @@ func (s *Service) handleClusterMember(w http.ResponseWriter, r *http.Request, re
 		s.writeError(w, err)
 		return
 	}
+	s.auditHTTP(r, "cluster.member.delete", "replica_id", id)
 	w.WriteHeader(http.StatusNoContent)
 }
 

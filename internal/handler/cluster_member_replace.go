@@ -36,6 +36,13 @@ func (s *Service) handleReplaceClusterMember(w http.ResponseWriter, r *http.Requ
 		s.writeError(w, err)
 		return
 	}
+	s.auditHTTP(r, "cluster.member.replace",
+		"old_replica_id", oldReplicaID,
+		"new_replica_id", req.ReplicaID,
+		"target", req.Target,
+		"objects", result.Objects,
+		"shards", result.Shards,
+	)
 	s.writeJSON(w, http.StatusAccepted, result)
 }
 

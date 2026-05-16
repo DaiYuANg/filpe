@@ -39,6 +39,12 @@ func (s *Service) handleClusterRebalance(w http.ResponseWriter, r *http.Request)
 		s.writeError(w, err)
 		return
 	}
+	s.auditHTTP(r, "cluster.rebalance",
+		"replica_id", replicaID,
+		"node_id", result.NodeID,
+		"objects", result.Objects,
+		"shards", result.Shards,
+	)
 	s.writeJSON(w, http.StatusAccepted, result)
 }
 

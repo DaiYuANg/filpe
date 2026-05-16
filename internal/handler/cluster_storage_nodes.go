@@ -23,6 +23,7 @@ func (s *Service) handleClusterStorageNodesSync(w http.ResponseWriter, r *http.R
 		s.writeError(w, err)
 		return
 	}
+	s.auditHTTP(r, "cluster.storage_nodes.sync")
 	if s.engine == nil {
 		s.writeJSON(w, http.StatusOK, []any{})
 		return
