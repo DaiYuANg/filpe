@@ -16,6 +16,9 @@ treated as a production-grade object storage service.
 - Metadata is backed by the Raft state machine rather than an external KV store.
 - Object data is written through the current storage engine with local erasure
   coding and repair primitives.
+- Storage placement now has local and remote `StorageNode` implementations. The
+  remote shard path uses the internal HTTP shard endpoint, and tests cover a
+  two-node write/read loop through that transport.
 - Background repair is scheduled through gocron and guarded by Raft leadership,
   so only the current leader runs cluster-wide repair jobs.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
@@ -204,12 +207,69 @@ Required work:
 
 ## Immediate next step
 
-The next implementation should focus on the distributed storage core:
+The next implementation should continue turning the prototype into a production
+storage service in small, testable iterations.
 
-- Introduce `StorageNode`.
-- Introduce `PlacementPlanner`.
-- Store shard placement in object metadata.
-- Route the existing local erasure-coded write path through the new abstractions.
+1. Repair hardening
 
-This keeps the current single-node behavior working while creating the seam
-needed for real multi-node data placement.
+- Store and verify per-shard checksums.
+- Add object-level checksum validation.
+- Add background scrub jobs for bitrot detection.
+- Add repair rate limiting and retry backoff.
+- Expose repair progress, failures, and last-run status.
+- Repair missing or corrupted shards from remote healthy shards.
+
+2. Cluster lifecycle
+
+- Make bootstrap and join flows idempotent across restarts.
+- Add drain, decommission, and rebalance flows.
+- Track node liveness, disk capacity, and shard ownership.
+- Handle node loss, node replacement, and address changes.
+- Add admin APIs and Web UI screens for cluster membership operations.
+
+3. S3 compatibility
+
+- Add AWS Signature V4 authentication.
+- Add access keys, secret keys, and request authorization.
+- Implement multipart upload.
+- Implement presigned URLs.
+- Implement range reads and correct ETag semantics.
+- Align XML error responses and status codes with S3 behavior.
+- Add S3 compatibility tests.
+
+4. Security
+
+- Add admin authentication.
+- Add access key and secret management.
+- Add bucket/object authorization.
+- Support TLS configuration.
+- Add audit logs for data and admin operations.
+- Protect internal cluster and shard APIs.
+
+5. Observability
+
+- Add metrics for request latency, throughput, error rates, and object sizes.
+- Add Raft metrics for state, leader changes, membership, and apply latency.
+- Add storage metrics for capacity, shard health, repair, and scrub.
+- Add tracing around write/read/delete/search paths.
+- Add structured audit logs.
+- Expose health and readiness checks suitable for orchestration.
+
+6. Test coverage
+
+- Add multi-node integration tests beyond the current remote shard transport
+  loop.
+- Add leader-change, network-partition, and node-restart tests.
+- Add partial write and crash recovery tests.
+- Add corrupted shard and missing shard tests.
+- Add concurrent put/get/delete/list tests.
+- Add S3 compatibility tests.
+
+7. Operations
+
+- Add Docker image build.
+- Add example configuration files.
+- Add systemd and container deployment examples.
+- Add Kubernetes examples after the cluster model stabilizes.
+- Document data directory layout.
+- Document backup, restore, and upgrade procedures.
