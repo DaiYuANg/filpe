@@ -126,6 +126,25 @@ func (s *Service) handleAddClusterMember(w http.ResponseWriter, r *http.Request)
 		s.writeError(w, err)
 		return
 	}
+	membership, err := s.raft.GetMembership(r.Context())
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if currentTarget, exists := membership.Nodes[req.ReplicaID]; exists {
+		if currentTarget == req.Target {
+			s.writeJSON(w, http.StatusOK, map[string]any{
+				"replica_id": req.ReplicaID,
+				"target":     req.Target,
+				"status":     "already_added",
+			})
+			return
+		}
+		s.writeJSON(w, http.StatusConflict, map[string]string{
+			"error": fmt.Sprintf("raft replica %d already exists with different target", req.ReplicaID),
+		})
+		return
+	}
 	if err := s.raft.AddReplica(r.Context(), req.ReplicaID, req.Target); err != nil {
 		s.writeError(w, err)
 		return
@@ -181,9 +200,7 @@ func (s *Service) handleClusterMember(w http.ResponseWriter, r *http.Request, re
 		return
 	}
 	if _, ok := membership.Nodes[id]; !ok {
-		s.writeJSON(w, http.StatusNotFound, map[string]string{
-			"error": "replica not found",
-		})
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if err := s.raft.RemoveReplica(r.Context(), id); err != nil {
