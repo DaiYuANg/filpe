@@ -5,8 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"strconv"
+	"strings"
+
+	"github.com/lyonbrown4d/maxio/internal/discovery"
 )
 
 type addReplicaRequest struct {
@@ -206,8 +210,30 @@ func (s *Service) syncStorageNodes(ctx context.Context) error {
 	if localReplicaID == 0 {
 		return errors.New("local raft replica id is missing")
 	}
-	if err := s.engine.SyncStorageNodesFromRaft(localReplicaID, membership.Nodes); err != nil {
+	storageNodes := s.storageNodesFromMembership(membership.Nodes)
+	if err := s.engine.SyncStorageNodesFromRaft(localReplicaID, storageNodes); err != nil {
 		return fmt.Errorf("sync engine storage nodes: %w", err)
 	}
 	return nil
+}
+
+func (s *Service) storageNodesFromMembership(raftNodes map[uint64]string) map[uint64]string {
+	storageNodes := make(map[uint64]string, len(raftNodes))
+	maps.Copy(storageNodes, raftNodes)
+	for _, node := range s.discoveryNodes() {
+		if node.ReplicaID == 0 || strings.TrimSpace(node.HTTPAddress) == "" {
+			continue
+		}
+		if _, ok := storageNodes[node.ReplicaID]; ok {
+			storageNodes[node.ReplicaID] = strings.TrimSpace(node.HTTPAddress)
+		}
+	}
+	return storageNodes
+}
+
+func (s *Service) discoveryNodes() []discovery.Node {
+	if s == nil || s.discovery == nil {
+		return nil
+	}
+	return s.discovery.Nodes()
 }

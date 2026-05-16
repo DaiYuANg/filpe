@@ -6,11 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/lyonbrown4d/maxio/internal/engine"
+	"github.com/lyonbrown4d/maxio/internal/handler"
 	"github.com/lyonbrown4d/maxio/internal/model"
 )
 
@@ -113,6 +117,47 @@ func TestPutAndGetObjectWithDistributedPlacement(t *testing.T) {
 	assertRemoteNodesStoredShards(t, nodeA, nodeB)
 }
 
+func TestPutAndGetObjectWithRemoteShardHTTPTransport(t *testing.T) {
+	ctx := context.Background()
+	node1 := newTestEngine(t)
+	node2 := newTestEngine(t)
+
+	server := httptest.NewServer(storageShardHandler(node2))
+	defer server.Close()
+
+	if err := node1.SyncStorageNodesFromRaft(1, map[uint64]string{
+		1: "127.0.0.1:9001",
+		2: server.URL,
+	}); err != nil {
+		t.Fatalf("sync storage nodes: %v", err)
+	}
+
+	content := []byte("remote shard http transport object payload")
+	meta, err := node1.PutObject(ctx, "test-bucket", "remote-http-key.txt", bytes.NewReader(content), "text/plain")
+	if err != nil {
+		t.Fatalf("PutObject: %v", err)
+	}
+	assertRemoteHTTPShardsStored(ctx, t, node2, meta)
+
+	reader, _, err := node1.GetObject(ctx, "test-bucket", "remote-http-key.txt")
+	if err != nil {
+		t.Fatalf("GetObject: %v", err)
+	}
+	defer func() {
+		if closeErr := reader.Close(); closeErr != nil {
+			t.Fatalf("close reader: %v", closeErr)
+		}
+	}()
+
+	got, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read object data: %v", err)
+	}
+	if !bytes.Equal(got, content) {
+		t.Fatalf("data = %q, want %q", got, content)
+	}
+}
+
 func registerDistributedPlacementNodes(t *testing.T, e *engine.Engine, nodes ...*inMemoryStorageNode) error {
 	t.Helper()
 	for _, node := range nodes {
@@ -167,5 +212,30 @@ func assertRemoteNodesStoredShards(t *testing.T, nodes ...*inMemoryStorageNode) 
 		if count := node.ShardCount(); count == 0 {
 			t.Fatalf("expected shards on in-memory node %q", node.id)
 		}
+	}
+}
+
+func storageShardHandler(e *engine.Engine) *http.ServeMux {
+	logger := slog.New(slog.DiscardHandler)
+	service := handler.NewService(nil, e, nil, nil, nil, logger)
+	router := http.NewServeMux()
+	service.RegisterHTTP(router)
+	return router
+}
+
+func assertRemoteHTTPShardsStored(ctx context.Context, t *testing.T, e *engine.Engine, meta engine.ObjectInfo) {
+	t.Helper()
+	remoteShards := 0
+	for _, placement := range meta.ShardPlacements {
+		if placement.NodeID != "raft-2" {
+			continue
+		}
+		remoteShards++
+		if !e.LocalShardExists(ctx, meta.ShardDir, meta.Hash, placement.Index) {
+			t.Fatalf("expected shard %d on remote HTTP node", placement.Index)
+		}
+	}
+	if remoteShards == 0 {
+		t.Fatal("expected at least one shard placed on remote HTTP node")
 	}
 }

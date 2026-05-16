@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,7 @@ const defaultConfigPath = "./config.json"
 
 type Config struct {
 	HTTPAddress            string `json:"http_address"             koanf:"http_address"             validate:"required,min=1"`
+	StorageAddress         string `json:"storage_address"          koanf:"storage_address"`
 	DataDir                string `json:"data_dir"                 koanf:"data_dir"                 validate:"required,min=1"`
 	LogLevel               string `json:"log_level"                koanf:"log_level"                validate:"required,oneof=debug info warn error"`
 	RaftNodeID             uint64 `json:"raft_node_id"             koanf:"raft_node_id"`
@@ -39,6 +41,7 @@ type Config struct {
 func Default() Config {
 	return Config{
 		HTTPAddress:          ":8080",
+		StorageAddress:       "127.0.0.1:8080",
 		DataDir:              "./data",
 		LogLevel:             "info",
 		RaftNodeID:           1,
@@ -136,6 +139,7 @@ func normalize(cfg Config) (Config, error) {
 func trim(cfg Config) Config {
 	cfg.DataDir = strings.TrimSpace(cfg.DataDir)
 	cfg.HTTPAddress = strings.TrimSpace(cfg.HTTPAddress)
+	cfg.StorageAddress = strings.TrimSpace(cfg.StorageAddress)
 	cfg.LogLevel = strings.TrimSpace(cfg.LogLevel)
 	cfg.RaftAddress = strings.TrimSpace(cfg.RaftAddress)
 	cfg.RaftDataDir = strings.TrimSpace(cfg.RaftDataDir)
@@ -168,6 +172,9 @@ func validateRequired(cfg Config) error {
 func applyZeroDefaults(cfg Config) Config {
 	if cfg.RaftNodeID == 0 {
 		cfg.RaftNodeID = 1
+	}
+	if cfg.StorageAddress == "" {
+		cfg.StorageAddress = storageAddressFromHTTPAddress(cfg.HTTPAddress)
 	}
 	if cfg.RaftShardID == 0 {
 		cfg.RaftShardID = 1
@@ -214,12 +221,37 @@ func (cfg Config) RaftOperationTimeoutDuration() time.Duration {
 	return duration
 }
 
+func (cfg Config) StorageAdvertiseAddress() string {
+	if strings.TrimSpace(cfg.StorageAddress) != "" {
+		return strings.TrimSpace(cfg.StorageAddress)
+	}
+	return storageAddressFromHTTPAddress(cfg.HTTPAddress)
+}
+
 func (cfg Config) PendingObjectTTLDuration() time.Duration {
 	duration, err := time.ParseDuration(cfg.PendingObjectTTL)
 	if err != nil {
 		return time.Hour
 	}
 	return duration
+}
+
+func storageAddressFromHTTPAddress(address string) string {
+	address = strings.TrimSpace(address)
+	if address == "" || strings.Contains(address, "://") {
+		return address
+	}
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		if strings.HasPrefix(address, ":") {
+			return "127.0.0.1" + address
+		}
+		return address
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, port)
 }
 
 func (cfg Config) RepairIntervalDuration() time.Duration {

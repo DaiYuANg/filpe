@@ -25,12 +25,13 @@ func Module() dix.Module {
 					return nil, fmt.Errorf("engine init: %w", err)
 				}
 				storageNodeID := raftStorageNodeID(cfg.RaftNodeID)
-				engine.ConfigureLocalNode(storageNodeID, cfg.RaftAddress)
+				engine.ConfigureLocalNode(storageNodeID, cfg.StorageAdvertiseAddress())
 				logger.Info("erasure engine initialized",
 					"data_chunks", DefaultDataChunks,
 					"parity_chunks", DefaultParityChunks,
 					"data_dir", dataDir,
 					"storage_node", storageNodeID,
+					"storage_address", cfg.StorageAdvertiseAddress(),
 				)
 				return engine, nil
 			}),

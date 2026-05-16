@@ -35,12 +35,10 @@ func (e *Engine) SyncStorageNodesFromRaft(localReplicaID uint64, raftNodes map[u
 	defer e.mu.Unlock()
 
 	localNodeID := raftStorageNodeID(localReplicaID)
-	nextNodes, localNodeAddress, err := syncRaftStorageNodes(localReplicaID, raftNodes)
+	localNodeAddress := e.localNodeAddress(localNodeID)
+	nextNodes, _, err := syncRaftStorageNodes(localReplicaID, raftNodes)
 	if err != nil {
 		return err
-	}
-	if localNodeAddress == "" {
-		localNodeAddress = e.localNodeAddress(localNodeID)
 	}
 
 	e.nodes = map[string]StorageNode{}

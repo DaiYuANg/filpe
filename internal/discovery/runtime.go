@@ -55,7 +55,7 @@ func NewRuntime(cfg config.Config, logger *slog.Logger) *Runtime {
 			Version:     1,
 			ReplicaID:   cfg.RaftNodeID,
 			RaftAddress: cfg.RaftAddress,
-			HTTPAddress: cfg.HTTPAddress,
+			HTTPAddress: cfg.StorageAdvertiseAddress(),
 		},
 		seeds: splitSeeds(cfg.GossipSeeds),
 	}
