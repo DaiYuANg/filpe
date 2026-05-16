@@ -102,3 +102,34 @@ func TestSyncStorageNodesFromRaft(t *testing.T) {
 		}
 	}
 }
+
+func TestSyncStorageNodesFromRaftUpdatesNodeAddresses(t *testing.T) {
+	e := newTestEngine(t)
+	if err := e.SyncStorageNodesFromRaft(1, map[uint64]string{
+		1: "127.0.0.1:7001",
+		2: "127.0.0.1:7002",
+	}); err != nil {
+		t.Fatalf("sync storage nodes: %v", err)
+	}
+	if err := e.SyncStorageNodesFromRaft(1, map[uint64]string{
+		1: "127.0.0.1:7101",
+		2: "127.0.0.1:7102",
+	}); err != nil {
+		t.Fatalf("sync updated storage nodes: %v", err)
+	}
+
+	local, err := e.LocalStorageNode()
+	if err != nil {
+		t.Fatalf("local storage node: %v", err)
+	}
+	if local.Address() != "127.0.0.1:7101" {
+		t.Fatalf("local address = %q, want %q", local.Address(), "127.0.0.1:7101")
+	}
+	remote, err := e.StorageNode("raft-2")
+	if err != nil {
+		t.Fatalf("remote storage node: %v", err)
+	}
+	if remote.Address() != "127.0.0.1:7102" {
+		t.Fatalf("remote address = %q, want %q", remote.Address(), "127.0.0.1:7102")
+	}
+}

@@ -21,6 +21,7 @@ const defaultClusterJoinPath = "/_cluster/join"
 const defaultClusterRebalancePath = "/_cluster/rebalance"
 const defaultClusterRebalancePlanPath = "/_cluster/rebalance/plan"
 const defaultClusterStorageNodesPath = "/_cluster/storage-nodes"
+const defaultClusterStorageNodesSyncPath = "/_cluster/storage-nodes/sync"
 const defaultDiscoveryPath = "/_cluster/discovery"
 const defaultRepairStatusPath = "/_repair/status"
 

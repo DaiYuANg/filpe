@@ -29,6 +29,9 @@ func (s *Service) handleNamedControlRoute(w http.ResponseWriter, r *http.Request
 		strings.Trim(defaultClusterStorageNodesPath, "/"): func() {
 			s.handleClusterStorageNodes(w, r)
 		},
+		strings.Trim(defaultClusterStorageNodesSyncPath, "/"): func() {
+			s.handleClusterStorageNodesSync(w, r)
+		},
 		strings.Trim(defaultDiscoveryPath, "/"):    func() { s.handleDiscovery(w, r) },
 		strings.Trim(defaultRepairStatusPath, "/"): func() { s.handleRepairStatus(w, r) },
 	}
