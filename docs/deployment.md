@@ -52,6 +52,28 @@ The admin token is also accepted for bucket and object routes.
 
 `/healthz` and `/readyz` remain unauthenticated for load balancers.
 
+## TLS termination
+
+Terminate TLS at a reverse proxy, ingress, or load balancer in front of MaxIO.
+
+The current httpx runtime used by MaxIO exposes plain HTTP serving. Keep MaxIO on a private network and expose only the TLS terminator publicly.
+
+Example topology:
+
+```text
+client -> TLS proxy or ingress -> MaxIO HTTP address
+```
+
+Forward these headers unchanged when admin or API tokens are used:
+
+```text
+Authorization
+X-Maxio-Control
+X-Maxio-API
+```
+
+The internal shard API `/_internal/storage/shards/*` must only be reachable by trusted MaxIO nodes or by a private service network. If `admin_token` is configured, MaxIO remote shard transport automatically sends `X-Maxio-Control`.
+
 ## Multi-node bootstrap
 
 Each node needs a stable raft address and an HTTP storage address.
