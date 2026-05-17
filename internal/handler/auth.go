@@ -19,7 +19,7 @@ func (s *Service) requiresAdminAuth(route string, parts []string) bool {
 		return false
 	}
 	switch parts[0] {
-	case "_cluster", "_repair", "_index", "_internal":
+	case "_cluster", "_repair", "_dedupe", "_index", "_internal":
 		return true
 	default:
 		return false

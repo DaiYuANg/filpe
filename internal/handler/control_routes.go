@@ -42,6 +42,9 @@ func (s *Service) handleNamedControlRoute(w http.ResponseWriter, r *http.Request
 		},
 		strings.Trim(defaultDiscoveryPath, "/"):    func() { s.handleDiscovery(w, r) },
 		strings.Trim(defaultRepairStatusPath, "/"): func() { s.handleRepairStatus(w, r) },
+		strings.Trim(defaultDedupeStatusPath, "/"): func() { s.handleDedupeStatus(w, r) },
+		strings.Trim(defaultDedupePlanPath, "/"):   func() { s.handleDedupePlan(w, r) },
+		strings.Trim(defaultDedupeRunPath, "/"):    func() { s.handleDedupeRun(w, r) },
 		strings.Trim(defaultRecoveryPlanPath, "/"): func() {
 			s.handleRecoveryPlan(w, r)
 		},

@@ -32,6 +32,8 @@ type SearchResult = model.SearchResult
 type Health = engine.Health
 type RepairResult = engine.RepairResult
 type ScrubResult = engine.ScrubResult
+type DedupeOptions = store.DedupeOptions
+type DedupeResult = store.DedupeResult
 type RebalanceResult = store.RebalanceResult
 type RecoveryResult = store.RecoveryResult
 type RecoveryPlan = store.RecoveryPlan
@@ -157,6 +159,27 @@ func (s *Service) RepairObject(ctx context.Context, bucket, key string) (RepairR
 	result, err := s.store.RepairObject(ctx, bucket, key)
 	if err != nil {
 		return RepairResult{}, fmt.Errorf("repair object: %w", err)
+	}
+	return result, nil
+}
+
+func (s *Service) PlanDedupe(ctx context.Context) (DedupeResult, error) {
+	result, err := s.store.Dedupe(ctx, store.DedupeOptions{
+		DryRun:   true,
+		MaxFixes: s.cfg.DedupeMaxFixes,
+	})
+	if err != nil {
+		return DedupeResult{}, fmt.Errorf("plan dedupe: %w", err)
+	}
+	return result, nil
+}
+
+func (s *Service) RunDedupe(ctx context.Context) (DedupeResult, error) {
+	result, err := s.store.Dedupe(ctx, store.DedupeOptions{
+		MaxFixes: s.cfg.DedupeMaxFixes,
+	})
+	if err != nil {
+		return DedupeResult{}, fmt.Errorf("run dedupe: %w", err)
 	}
 	return result, nil
 }

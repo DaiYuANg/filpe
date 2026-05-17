@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/lyonbrown4d/maxio/internal/config"
+	"github.com/lyonbrown4d/maxio/internal/dedupe"
 	"github.com/lyonbrown4d/maxio/object"
 )
 
@@ -25,6 +26,9 @@ const defaultClusterStorageNodesPath = "/_cluster/storage-nodes"
 const defaultClusterStorageNodesSyncPath = "/_cluster/storage-nodes/sync"
 const defaultDiscoveryPath = "/_cluster/discovery"
 const defaultRepairStatusPath = "/_repair/status"
+const defaultDedupeStatusPath = "/_dedupe/status"
+const defaultDedupePlanPath = "/_dedupe/plan"
+const defaultDedupeRunPath = "/_dedupe/run"
 const defaultRecoveryPlanPath = "/_recovery/plan"
 const defaultRecoveryStatusPath = "/_recovery/status"
 const defaultRecoveryRunPath = "/_recovery/run"
@@ -34,13 +38,19 @@ const defaultIndexRebuildPath = "/_index/rebuild"
 type Service struct {
 	logger *slog.Logger
 	cfg    config.Config
+	dedupe *dedupe.Runtime
 	Dependencies
 }
 
 func NewService(deps Dependencies, logger *slog.Logger, cfg config.Config) *Service {
+	return newService(deps, logger, cfg, nil)
+}
+
+func newService(deps Dependencies, logger *slog.Logger, cfg config.Config, dedupeRuntime *dedupe.Runtime) *Service {
 	return &Service{
 		logger:       logger,
 		cfg:          cfg,
+		dedupe:       dedupeRuntime,
 		Dependencies: deps,
 	}
 }

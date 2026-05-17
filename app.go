@@ -11,6 +11,7 @@ import (
 	"github.com/arcgolabs/configx"
 	"github.com/arcgolabs/dix"
 	"github.com/lyonbrown4d/maxio/internal/config"
+	"github.com/lyonbrown4d/maxio/internal/dedupe"
 	"github.com/lyonbrown4d/maxio/internal/discovery"
 	"github.com/lyonbrown4d/maxio/internal/engine"
 	"github.com/lyonbrown4d/maxio/internal/handler"
@@ -252,6 +253,7 @@ func defaultModules(configOptions ...configx.Option) []dix.Module {
 		object.Module(),
 		scheduler.Module(),
 		repair.Module(),
+		dedupe.Module(),
 		s3.Module(),
 		handler.Module(),
 		http.Module(),

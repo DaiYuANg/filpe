@@ -18,6 +18,14 @@ func (cfg Config) RepairRetryBackoffDuration() time.Duration {
 	return duration
 }
 
+func (cfg Config) DedupeIntervalDuration() time.Duration {
+	duration, err := time.ParseDuration(cfg.DedupeInterval)
+	if err != nil {
+		return 30 * time.Minute
+	}
+	return duration
+}
+
 func (cfg Config) IndexTimeoutDuration() time.Duration {
 	duration, err := time.ParseDuration(cfg.IndexTimeout)
 	if err != nil {

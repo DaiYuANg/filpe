@@ -20,7 +20,7 @@ func Module() dix.Module {
 			dix.Provider1(newLogger),
 			dix.Provider1(newEventBus),
 			dix.Provider6(NewDependencies),
-			dix.Provider3(NewService),
+			dix.Provider4(newService),
 		),
 		dix.Hooks(
 			dix.OnStart2(startObjectEventSubscription),
