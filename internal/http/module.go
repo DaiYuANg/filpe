@@ -77,12 +77,15 @@ func newHTTPRuntime(
 }
 
 func startHTTPRuntime(ctx context.Context, rt *httpRuntime) error {
-	rt.routes.Register(rt.server)
-
 	router := stdhttp.NewServeMux()
 	rt.service.RegisterHTTP(router)
+	nativeHandler := fiberadapter.HTTPHandler(router)
+	rt.app.All("/s3", nativeHandler)
+	rt.app.All("/s3/*", nativeHandler)
+
+	rt.routes.Register(rt.server)
 	rt.app.Get("/_admin", rt.handleAdmin)
-	rt.app.All("/*", fiberadapter.HTTPHandler(router))
+	rt.app.All("/*", nativeHandler)
 
 	go rt.listen(ctx)
 
