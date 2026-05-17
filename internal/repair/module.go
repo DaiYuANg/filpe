@@ -24,6 +24,9 @@ type Summary struct {
 	Unhealthy       int  `json:"unhealthy"`
 	Missing         int  `json:"missing"`
 	Corrupted       int  `json:"corrupted"`
+	Scrubbed        int  `json:"scrubbed"`
+	ScrubFailed     int  `json:"scrub_failed"`
+	ChecksumFailed  int  `json:"checksum_failed"`
 	RepairAttempts  int  `json:"repair_attempts"`
 	RepairRetries   int  `json:"repair_retries"`
 	Throttled       int  `json:"throttled"`
@@ -138,6 +141,9 @@ func summaryAttrs(summary Summary) []any {
 		"unhealthy", summary.Unhealthy,
 		"missing", summary.Missing,
 		"corrupted", summary.Corrupted,
+		"scrubbed", summary.Scrubbed,
+		"scrub_failed", summary.ScrubFailed,
+		"checksum_failed", summary.ChecksumFailed,
 		"repair_attempts", summary.RepairAttempts,
 		"repair_retries", summary.RepairRetries,
 		"throttled", summary.Throttled,
@@ -232,7 +238,7 @@ func repairObject(
 		return nil
 	}
 	if health.Missing == 0 && health.Corrupted == 0 {
-		return nil
+		return scrubHealthyObject(ctx, runtime, meta, summary)
 	}
 	summary.Missing += health.Missing
 	summary.Corrupted += health.Corrupted

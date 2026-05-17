@@ -87,6 +87,9 @@ var ErrShardRecoveryFailed = errors.New("engine: shard recovery failed")
 // ErrShardCorrupted is returned when shard content does not match layout metadata.
 var ErrShardCorrupted = errors.New("engine: shard corrupted")
 
+// ErrObjectCorrupted is returned when decoded object content does not match its metadata hash.
+var ErrObjectCorrupted = errors.New("engine: object corrupted")
+
 func NewEngine(dataDir string, dataChunks, parityChunks int, fs afero.Fs) (*Engine, error) {
 	if dataChunks < 1 {
 		dataChunks = DefaultDataChunks
@@ -241,6 +244,9 @@ func (e *Engine) GetObject(ctx context.Context, bucket, key string) (io.ReadClos
 	decoded, err := e.coder.Decode(shards, layout.Size)
 	if err != nil {
 		return nil, ObjectInfo{}, fmt.Errorf("engine: decode: %w", err)
+	}
+	if _, err := verifyObjectChecksum(layout, decoded); err != nil {
+		return nil, ObjectInfo{}, err
 	}
 
 	return io.NopCloser(bytes.NewReader(decoded)), e.objectInfoFromLayout(layout), nil

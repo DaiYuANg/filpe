@@ -17,11 +17,12 @@ import (
 )
 
 var (
-	ErrNotFound       = store.ErrNotFound
-	ErrBucketExists   = store.ErrBucketExists
-	ErrBucketNotFound = store.ErrBucketNotFound
-	ErrBadRequest     = store.ErrBadRequest
-	ErrEngineFailed   = store.ErrEngineFailed
+	ErrNotFound        = store.ErrNotFound
+	ErrBucketExists    = store.ErrBucketExists
+	ErrBucketNotFound  = store.ErrBucketNotFound
+	ErrBadRequest      = store.ErrBadRequest
+	ErrEngineFailed    = store.ErrEngineFailed
+	ErrObjectCorrupted = engine.ErrObjectCorrupted
 )
 
 type Bucket = model.Bucket
@@ -30,6 +31,7 @@ type SearchQuery = model.SearchQuery
 type SearchResult = model.SearchResult
 type Health = engine.Health
 type RepairResult = engine.RepairResult
+type ScrubResult = engine.ScrubResult
 type RebalanceResult = store.RebalanceResult
 type RecoveryResult = store.RecoveryResult
 type RecoveryPlan = store.RecoveryPlan
@@ -141,6 +143,14 @@ func (s *Service) CheckHealth(ctx context.Context, bucket, key string) (Health, 
 		return Health{}, fmt.Errorf("check object health: %w", err)
 	}
 	return health, nil
+}
+
+func (s *Service) ScrubObject(ctx context.Context, bucket, key string) (ScrubResult, error) {
+	result, err := s.store.ScrubObject(ctx, bucket, key)
+	if err != nil {
+		return ScrubResult{}, fmt.Errorf("scrub object: %w", err)
+	}
+	return result, nil
 }
 
 func (s *Service) RepairObject(ctx context.Context, bucket, key string) (RepairResult, error) {

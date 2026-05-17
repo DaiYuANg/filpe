@@ -21,6 +21,8 @@ treated as a production-grade object storage service.
   two-node write/read loop through that transport.
 - Background repair is scheduled through gocron and guarded by Raft leadership,
   so only the current leader runs cluster-wide repair jobs.
+- Background repair now scrubs healthy objects by verifying shard checksums and
+  decoded object checksums, and exposes scrub counters in repair status.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
   production target.
 

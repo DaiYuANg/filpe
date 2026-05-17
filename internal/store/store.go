@@ -163,6 +163,18 @@ func (s *Store) CheckHealth(ctx context.Context, bucket, key string) (engine.Hea
 	return health, nil
 }
 
+// ScrubObject verifies shard checksums and the decoded object checksum.
+func (s *Store) ScrubObject(ctx context.Context, bucket, key string) (engine.ScrubResult, error) {
+	if _, err := s.StatObject(ctx, bucket, key); err != nil {
+		return engine.ScrubResult{}, err
+	}
+	result, err := s.engine.ScrubObject(ctx, bucket, key)
+	if err != nil {
+		return engine.ScrubResult{}, fmt.Errorf("scrub object: %w", mapStoreError(err))
+	}
+	return result, nil
+}
+
 // RepairObject reconstructs and writes missing shards for one recoverable object.
 func (s *Store) RepairObject(ctx context.Context, bucket, key string) (engine.RepairResult, error) {
 	if _, err := s.StatObject(ctx, bucket, key); err != nil {
