@@ -37,6 +37,7 @@ func recordUnhealthyScrub(
 	summary.Unhealthy++
 	summary.Missing += result.Health.Missing
 	summary.Corrupted += result.Health.Corrupted
+	addIssue(summary, issueFromHealth(meta, result.Health, IssueUnhealthyScrub, "object scrub reported unhealthy shards"))
 	runtime.logger.WarnContext(ctx, "object scrub reported unhealthy shards",
 		"bucket", meta.Bucket,
 		"key", meta.Key,
@@ -58,6 +59,12 @@ func recordFailedScrub(
 		summary.Corrupted++
 		summary.ChecksumFailed++
 		summary.Unrecoverable++
+		addIssue(summary, Issue{
+			Bucket: meta.Bucket,
+			Key:    meta.Key,
+			Kind:   IssueChecksumFailed,
+			Reason: err.Error(),
+		})
 		runtime.logger.WarnContext(ctx, "object checksum verification failed",
 			"bucket", meta.Bucket,
 			"key", meta.Key,
@@ -66,5 +73,11 @@ func recordFailedScrub(
 		return
 	}
 	summary.Failed++
+	addIssue(summary, Issue{
+		Bucket: meta.Bucket,
+		Key:    meta.Key,
+		Kind:   IssueScrubFailed,
+		Reason: err.Error(),
+	})
 	runtime.logger.WarnContext(ctx, "object scrub failed", "bucket", meta.Bucket, "key", meta.Key, "error", err)
 }

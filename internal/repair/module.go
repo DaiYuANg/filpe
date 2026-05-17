@@ -19,22 +19,23 @@ const repairJobName = "maxio.object.repair"
 
 // Summary reports one repair scan result.
 type Summary struct {
-	Buckets         int  `json:"buckets"`
-	Objects         int  `json:"objects"`
-	Unhealthy       int  `json:"unhealthy"`
-	Missing         int  `json:"missing"`
-	Corrupted       int  `json:"corrupted"`
-	Scrubbed        int  `json:"scrubbed"`
-	ScrubFailed     int  `json:"scrub_failed"`
-	ChecksumFailed  int  `json:"checksum_failed"`
-	RepairAttempts  int  `json:"repair_attempts"`
-	RepairRetries   int  `json:"repair_retries"`
-	Throttled       int  `json:"throttled"`
-	RepairedObjects int  `json:"repaired_objects"`
-	RepairedShards  int  `json:"repaired_shards"`
-	Unrecoverable   int  `json:"unrecoverable"`
-	Failed          int  `json:"failed"`
-	Limited         bool `json:"limited"`
+	Buckets         int     `json:"buckets"`
+	Objects         int     `json:"objects"`
+	Unhealthy       int     `json:"unhealthy"`
+	Missing         int     `json:"missing"`
+	Corrupted       int     `json:"corrupted"`
+	Scrubbed        int     `json:"scrubbed"`
+	ScrubFailed     int     `json:"scrub_failed"`
+	ChecksumFailed  int     `json:"checksum_failed"`
+	RepairAttempts  int     `json:"repair_attempts"`
+	RepairRetries   int     `json:"repair_retries"`
+	Throttled       int     `json:"throttled"`
+	RepairedObjects int     `json:"repaired_objects"`
+	RepairedShards  int     `json:"repaired_shards"`
+	Unrecoverable   int     `json:"unrecoverable"`
+	Failed          int     `json:"failed"`
+	Limited         bool    `json:"limited"`
+	Issues          []Issue `json:"issues,omitempty"`
 }
 
 // Runtime owns the scheduled repair job.
@@ -234,6 +235,12 @@ func repairObject(
 	health, err := runtime.objects.CheckHealth(ctx, meta.Bucket, meta.Key)
 	if err != nil {
 		summary.Failed++
+		addIssue(summary, Issue{
+			Bucket: meta.Bucket,
+			Key:    meta.Key,
+			Kind:   IssueHealthCheckFailed,
+			Reason: err.Error(),
+		})
 		runtime.logger.WarnContext(ctx, "check object health failed", "bucket", meta.Bucket, "key", meta.Key, "error", err)
 		return nil
 	}
@@ -245,6 +252,7 @@ func repairObject(
 	summary.Unhealthy++
 	if !health.Recoverable {
 		summary.Unrecoverable++
+		addIssue(summary, issueFromHealth(meta, health, IssueUnrecoverableShards, "object shards are not recoverable"))
 		runtime.logger.WarnContext(ctx, "object shards are not recoverable",
 			"bucket", meta.Bucket,
 			"key", meta.Key,
@@ -266,6 +274,12 @@ func repairObject(
 	repairedShards, err := repairObjectWithRetry(ctx, runtime, meta, summary)
 	if err != nil {
 		summary.Failed++
+		addIssue(summary, Issue{
+			Bucket: meta.Bucket,
+			Key:    meta.Key,
+			Kind:   IssueRepairFailed,
+			Reason: err.Error(),
+		})
 		runtime.logger.WarnContext(ctx, "repair object failed", "bucket", meta.Bucket, "key", meta.Key, "error", err)
 		return nil
 	}
