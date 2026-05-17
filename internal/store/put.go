@@ -50,29 +50,54 @@ func (s *Store) putStagedObject(
 	staged *stagedObject,
 	existing existingObject,
 ) (model.ObjectMeta, error) {
-	if err := s.stageObjectMeta(ctx, bucket, key, opts, staged); err != nil {
-		return model.ObjectMeta{}, err
-	}
-
-	blob, refExists, createdBlob, err := s.prepareBlob(ctx, key, staged)
+	pending, err := s.stageObjectMeta(ctx, bucket, key, opts, staged)
 	if err != nil {
-		if cleanupErr := s.deleteStagedObjectMeta(ctx, bucket, key); cleanupErr != nil {
-			return model.ObjectMeta{}, fmt.Errorf("%w; cleanup staged metadata: %w", err, cleanupErr)
-		}
 		return model.ObjectMeta{}, err
 	}
 
+	blob, refExists, createdBlob, err := s.preparePutBlob(ctx, bucket, key, staged)
+	if err != nil {
+		return model.ObjectMeta{}, err
+	}
+	return s.completePreparedPut(ctx, bucket, key, opts, staged, existing, pending, blob, refExists, createdBlob)
+}
+
+func (s *Store) completePreparedPut(
+	ctx context.Context,
+	bucket string,
+	key string,
+	opts PutOptions,
+	staged *stagedObject,
+	existing existingObject,
+	pending model.ObjectMeta,
+	blob engine.BlobInfo,
+	refExists bool,
+	createdBlob bool,
+) (model.ObjectMeta, error) {
+	pending, err := s.updatePendingWriteIntent(ctx, pending, model.WriteIntentStageBlobPrepared)
+	if err != nil {
+		return model.ObjectMeta{}, s.failPut(ctx, bucket, key, staged.hash, blob, blobRefUnchanged, createdBlob, existing, err)
+	}
 	info, err := s.linkPutLayout(ctx, bucket, key, opts.ContentType, blob, createdBlob)
 	if err != nil {
 		return model.ObjectMeta{}, err
+	}
+	pending, err = s.updatePendingWriteIntent(ctx, pending, model.WriteIntentStageLayoutLinked)
+	if err != nil {
+		return model.ObjectMeta{}, s.failPut(ctx, bucket, key, staged.hash, blob, blobRefUnchanged, createdBlob, existing, err)
 	}
 
 	mutation, err := s.retainBlob(ctx, staged.hash, blob, refExists, existing.exists && existing.meta.Hash == staged.hash)
 	if err != nil {
 		return model.ObjectMeta{}, s.failPut(ctx, bucket, key, staged.hash, blob, blobRefUnchanged, createdBlob, existing, err)
 	}
+	pending, err = s.updatePendingWriteIntent(ctx, pending, model.WriteIntentStageBlobRetained)
+	if err != nil {
+		return model.ObjectMeta{}, s.failPut(ctx, bucket, key, staged.hash, blob, mutation, createdBlob, existing, err)
+	}
 
 	meta := opts.apply(objectMetaFromInfo(info))
+	meta.WriteIntent = advanceWriteIntent(pending.WriteIntent, model.WriteIntentStageCommitted, time.Now().UTC())
 	if err := s.meta.UpsertObjectMeta(ctx, meta); err != nil {
 		wrapped := fmt.Errorf("upsert object metadata: %w", mapStoreError(err))
 		return model.ObjectMeta{}, s.failPut(ctx, bucket, key, staged.hash, blob, mutation, createdBlob, existing, wrapped)
@@ -88,20 +113,44 @@ func (s *Store) putStagedObject(
 	return meta, nil
 }
 
-func (s *Store) stageObjectMeta(ctx context.Context, bucket, key string, opts PutOptions, staged *stagedObject) error {
+func (s *Store) preparePutBlob(
+	ctx context.Context,
+	bucket string,
+	key string,
+	staged *stagedObject,
+) (engine.BlobInfo, bool, bool, error) {
+	blob, refExists, createdBlob, err := s.prepareBlob(ctx, key, staged)
+	if err == nil {
+		return blob, refExists, createdBlob, nil
+	}
+	if cleanupErr := s.deleteStagedObjectMeta(ctx, bucket, key); cleanupErr != nil {
+		return engine.BlobInfo{}, false, false, fmt.Errorf("%w; cleanup staged metadata: %w", err, cleanupErr)
+	}
+	return engine.BlobInfo{}, false, false, err
+}
+
+func (s *Store) stageObjectMeta(
+	ctx context.Context,
+	bucket string,
+	key string,
+	opts PutOptions,
+	staged *stagedObject,
+) (model.ObjectMeta, error) {
+	now := time.Now().UTC()
 	meta := opts.apply(model.ObjectMeta{
 		Bucket:    bucket,
 		Key:       key,
 		Hash:      staged.hash,
 		ETag:      engine.ETagFromHash(staged.hash),
 		Size:      staged.size,
-		UpdatedAt: time.Now().UTC(),
+		UpdatedAt: now,
 		State:     model.ObjectStatePending,
 	})
+	meta.WriteIntent = newWriteIntent(bucket, key, staged.hash, now)
 	if err := s.meta.StageObjectMeta(ctx, meta); err != nil {
-		return fmt.Errorf("stage object metadata: %w", mapStoreError(err))
+		return model.ObjectMeta{}, fmt.Errorf("stage object metadata: %w", mapStoreError(err))
 	}
-	return nil
+	return meta, nil
 }
 
 func (s *Store) deleteStagedObjectMeta(ctx context.Context, bucket, key string) error {

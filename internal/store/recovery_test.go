@@ -97,6 +97,9 @@ func TestStoreRecoveryPlanReportsPendingAndOrphansWithoutMutating(t *testing.T) 
 	if len(plan.ExpiredPendingObjects) != 1 || plan.ExpiredPendingObjects[0].Key != "expired.txt" {
 		t.Fatalf("expired pending objects = %+v", plan.ExpiredPendingObjects)
 	}
+	if plan.WriteIntentStages[model.WriteIntentStageUnknown] != 2 {
+		t.Fatalf("write intent stages = %+v, want two unknown pending objects", plan.WriteIntentStages)
+	}
 	if plan.OrphanShardCleanup.Removed != 0 || len(plan.OrphanShardCleanup.Orphans) != 1 {
 		t.Fatalf("orphan cleanup plan = %+v", plan.OrphanShardCleanup)
 	}

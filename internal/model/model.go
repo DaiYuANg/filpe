@@ -34,9 +34,26 @@ type ObjectMeta struct {
 	UserMetadata       map[string]string `json:"user_metadata,omitempty"`
 	UpdatedAt          time.Time         `json:"updated_at"`
 	State              string            `json:"state,omitempty"`
+	WriteIntent        *WriteIntent      `json:"write_intent,omitempty"`
 	ShardPlacements    []ShardPlacement  `json:"shard_placements,omitempty"`
 	ShardChecksums     []string          `json:"shard_checksums,omitempty"`
 }
+
+type WriteIntent struct {
+	ID        string    `json:"id"`
+	Stage     string    `json:"stage"`
+	StartedAt time.Time `json:"started_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+const (
+	WriteIntentStageUnknown        = "unknown"
+	WriteIntentStageMetadataStaged = "metadata_staged"
+	WriteIntentStageBlobPrepared   = "blob_prepared"
+	WriteIntentStageLayoutLinked   = "layout_linked"
+	WriteIntentStageBlobRetained   = "blob_retained"
+	WriteIntentStageCommitted      = "committed"
+)
 
 type SearchQuery struct {
 	Query        string `json:"q,omitempty"`

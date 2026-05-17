@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lyonbrown4d/maxio/internal/metadata"
+	"github.com/lyonbrown4d/maxio/internal/model"
 	"github.com/lyonbrown4d/maxio/internal/store"
 )
 
@@ -29,6 +30,8 @@ func TestStorePutObjectDedupePreservesBlobRefPlacements(t *testing.T) {
 	mustNoError(t, err, "put second object")
 
 	mustEqual(t, first.Hash, second.Hash, "hashes must match")
+	mustEqual(t, first.WriteIntent.Stage, model.WriteIntentStageCommitted, "first write intent stage")
+	mustEqual(t, second.WriteIntent.Stage, model.WriteIntentStageCommitted, "second write intent stage")
 	mustDeepEqual(t, first.ShardPlacements, second.ShardPlacements, "shard placements should match across objects")
 	mustDeepEqual(t, first.ShardChecksums, second.ShardChecksums, "shard checksums should match across objects")
 

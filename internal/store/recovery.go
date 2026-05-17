@@ -36,6 +36,7 @@ type RecoveryPlan struct {
 	GeneratedAt           time.Time                       `json:"generated_at"`
 	PendingObjects        []model.ObjectMeta              `json:"pending_objects,omitempty"`
 	ExpiredPendingObjects []model.ObjectMeta              `json:"expired_pending_objects,omitempty"`
+	WriteIntentStages     map[string]int                  `json:"write_intent_stages,omitempty"`
 	OrphanShardCleanup    engine.OrphanShardCleanupResult `json:"orphan_shard_cleanup"`
 }
 
@@ -80,12 +81,24 @@ func (s *Store) PlanRecovery(ctx context.Context, pendingTTL time.Duration) (Rec
 	}
 	plan.PendingObjects = pending
 	plan.ExpiredPendingObjects = expiredPendingObjects(pending, pendingTTL, plan.GeneratedAt)
+	plan.WriteIntentStages = writeIntentStageCounts(pending)
 	orphanCleanup, err := s.cleanupOrphanShardSets(ctx, true)
 	if err != nil {
 		return plan, err
 	}
 	plan.OrphanShardCleanup = orphanCleanup
 	return plan, nil
+}
+
+func writeIntentStageCounts(objects []model.ObjectMeta) map[string]int {
+	counts := make(map[string]int)
+	for index := range objects {
+		counts[writeIntentStage(objects[index])]++
+	}
+	if len(counts) == 0 {
+		return nil
+	}
+	return counts
 }
 
 func (s *Store) RecoveryStatus() RecoveryStatus {
