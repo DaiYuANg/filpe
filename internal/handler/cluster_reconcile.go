@@ -21,6 +21,7 @@ type clusterStatusResponse struct {
 	LocalReplicaID  uint64                   `json:"local_replica_id"`
 	LocalRaftTarget string                   `json:"local_raft_target"`
 	Membership      raftx.Membership         `json:"membership"`
+	Nodes           []ClusterNodeInfo        `json:"nodes"`
 	StorageNodes    []engine.StorageNodeInfo `json:"storage_nodes"`
 	DiscoveryNodes  []discovery.Node         `json:"discovery_nodes"`
 	Reconcile       clusterReconcilePlan     `json:"reconcile"`
@@ -62,11 +63,13 @@ func (s *Service) handleClusterStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	plan := BuildClusterReconcilePlan(membership, s.discoveryNodes(), false)
+	storageNodes := s.clusterStorageNodeInfos()
 	s.writeJSON(w, http.StatusOK, clusterStatusResponse{
 		LocalReplicaID:  membership.LocalReplicaID,
 		LocalRaftTarget: s.localRaftTarget(),
 		Membership:      membership,
-		StorageNodes:    s.clusterStorageNodeInfos(),
+		Nodes:           BuildClusterNodeRegistry(membership, s.discoveryNodes(), storageNodes),
+		StorageNodes:    storageNodes,
 		DiscoveryNodes:  s.discoveryNodes(),
 		Reconcile:       plan,
 	})

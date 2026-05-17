@@ -1,0 +1,91 @@
+package handler_test
+
+import (
+	"slices"
+	"testing"
+
+	"github.com/lyonbrown4d/maxio/internal/discovery"
+	"github.com/lyonbrown4d/maxio/internal/engine"
+	"github.com/lyonbrown4d/maxio/internal/handler"
+	raftx "github.com/lyonbrown4d/maxio/internal/raft"
+)
+
+func TestBuildClusterNodeRegistryMergesMemberDiscoveryAndStorage(t *testing.T) {
+	t.Parallel()
+
+	nodes := handler.BuildClusterNodeRegistry(raftx.Membership{
+		LocalReplicaID: 1,
+		Nodes: map[uint64]string{
+			1: "127.0.0.1:63000",
+			2: "127.0.0.1:63001",
+		},
+	}, []discovery.Node{
+		{ReplicaID: 1, State: "alive", RaftAddress: "127.0.0.1:63000", HTTPAddress: "127.0.0.1:8080"},
+		{ReplicaID: 2, State: "suspect", RaftAddress: "127.0.0.1:63001", HTTPAddress: "127.0.0.1:8081"},
+		{ReplicaID: 3, State: "alive", RaftAddress: "127.0.0.1:63002", HTTPAddress: "127.0.0.1:8082"},
+	}, []engine.StorageNodeInfo{
+		{ID: "raft-1", Address: "127.0.0.1:8080", Local: true},
+		{ID: "raft-2", Address: "127.0.0.1:8081"},
+	})
+
+	if len(nodes) != 3 {
+		t.Fatalf("nodes = %+v, want 3", nodes)
+	}
+	assertClusterNode(t, nodes[0], 1, handler.ClusterNodeOnline)
+	assertClusterNode(t, nodes[1], 2, handler.ClusterNodeSuspect)
+	assertClusterNode(t, nodes[2], 3, handler.ClusterNodeDiscovered)
+	if !slices.Contains(nodes[2].Issues, "not_in_raft_membership") {
+		t.Fatalf("node 3 issues = %+v, want not_in_raft_membership", nodes[2].Issues)
+	}
+}
+
+func TestBuildClusterNodeRegistryReportsOfflineMissingStorage(t *testing.T) {
+	t.Parallel()
+
+	nodes := handler.BuildClusterNodeRegistry(raftx.Membership{
+		LocalReplicaID: 1,
+		Nodes: map[uint64]string{
+			1: "127.0.0.1:63000",
+			2: "127.0.0.1:63001",
+		},
+	}, []discovery.Node{
+		{ReplicaID: 1, State: "alive", RaftAddress: "127.0.0.1:63000"},
+	}, []engine.StorageNodeInfo{
+		{ID: "raft-1", Address: "127.0.0.1:8080", Local: true},
+	})
+
+	assertClusterNode(t, nodes[1], 2, handler.ClusterNodeOffline)
+	if !slices.Contains(nodes[1].Issues, "not_discovered") {
+		t.Fatalf("node 2 issues = %+v, want not_discovered", nodes[1].Issues)
+	}
+	if !slices.Contains(nodes[1].Issues, "storage_not_registered") {
+		t.Fatalf("node 2 issues = %+v, want storage_not_registered", nodes[1].Issues)
+	}
+}
+
+func TestBuildClusterNodeRegistryReportsDrainingStorageNode(t *testing.T) {
+	t.Parallel()
+
+	nodes := handler.BuildClusterNodeRegistry(raftx.Membership{
+		LocalReplicaID: 1,
+		Nodes: map[uint64]string{
+			1: "127.0.0.1:63000",
+		},
+	}, []discovery.Node{
+		{ReplicaID: 1, State: "alive", RaftAddress: "127.0.0.1:63000"},
+	}, []engine.StorageNodeInfo{
+		{ID: "raft-1", Address: "127.0.0.1:8080", Local: true, Drained: true},
+	})
+
+	assertClusterNode(t, nodes[0], 1, handler.ClusterNodeDraining)
+}
+
+func assertClusterNode(t *testing.T, node handler.ClusterNodeInfo, replicaID uint64, status string) {
+	t.Helper()
+	if node.ReplicaID != replicaID {
+		t.Fatalf("replica id = %d, want %d: %+v", node.ReplicaID, replicaID, node)
+	}
+	if node.Status != status {
+		t.Fatalf("status = %q, want %q: %+v", node.Status, status, node)
+	}
+}

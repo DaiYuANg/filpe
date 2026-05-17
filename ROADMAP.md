@@ -26,6 +26,8 @@ treated as a production-grade object storage service.
 - Object-level dedupe has a leader-only background scanner that reconciles
   committed object hashes, blob reference counts, orphan blob refs, and object
   layouts against canonical blob refs.
+- Cluster backend now exposes a normalized node registry that merges Raft
+  membership, gossip discovery state, and storage node registration/liveness.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
   production target.
 
