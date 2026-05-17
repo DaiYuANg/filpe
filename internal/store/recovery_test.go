@@ -100,6 +100,9 @@ func TestStoreRecoveryPlanReportsPendingAndOrphansWithoutMutating(t *testing.T) 
 	if plan.WriteIntentStages[model.WriteIntentStageUnknown] != 2 {
 		t.Fatalf("write intent stages = %+v, want two unknown pending objects", plan.WriteIntentStages)
 	}
+	if len(plan.PendingActions) != 2 {
+		t.Fatalf("pending actions = %+v, want two actions", plan.PendingActions)
+	}
 	if plan.OrphanShardCleanup.Removed != 0 || len(plan.OrphanShardCleanup.Orphans) != 1 {
 		t.Fatalf("orphan cleanup plan = %+v", plan.OrphanShardCleanup)
 	}
@@ -110,5 +113,46 @@ func TestStoreRecoveryPlanReportsPendingAndOrphansWithoutMutating(t *testing.T) 
 	}
 	if !eng.LocalShardExists(ctx, blob.ShardDir, blob.Hash, 0) {
 		t.Fatal("recovery plan removed orphan shard")
+	}
+}
+
+func TestStoreRecoverRollsBackBlobRetainedPendingWrite(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	meta := metadata.NewInMemoryMetadata()
+	eng, err := engine.NewEngine(t.TempDir(), engine.DefaultDataChunks, engine.DefaultParityChunks, nil)
+	mustNoError(t, err, "new engine")
+	blob, err := eng.PutBlob(ctx, "pending.txt", bytes.NewReader([]byte("pending payload")))
+	mustNoError(t, err, "put pending blob")
+	storeModule, err := store.NewStore("", meta, eng)
+	mustNoError(t, err, "new store")
+	mustNoError(t, storeModule.CreateBucket(ctx, "bucket"), "create bucket")
+	mustNoError(t, meta.CreateBlobRef(ctx, blob.Hash, blob.ShardDir, blob.Size, blob.ShardPlacements, blob.ShardChecksums), "create blob ref")
+	mustNoError(t, meta.StageObjectMeta(ctx, model.ObjectMeta{
+		Bucket: "bucket",
+		Key:    "pending.txt",
+		Hash:   blob.Hash,
+		WriteIntent: &model.WriteIntent{
+			Stage:     model.WriteIntentStageBlobRetained,
+			StartedAt: time.Now().UTC().Add(-2 * time.Hour),
+			UpdatedAt: time.Now().UTC().Add(-2 * time.Hour),
+		},
+		UpdatedAt: time.Now().UTC().Add(-2 * time.Hour),
+	}), "stage blob retained pending object")
+
+	result, err := storeModule.Recover(ctx, store.RecoveryOptions{
+		PendingTTL:          time.Hour,
+		CleanupOrphanShards: true,
+	})
+	mustNoError(t, err, "recover store")
+	if result.PendingRemoved != 1 {
+		t.Fatalf("pending removed = %d, want 1", result.PendingRemoved)
+	}
+	if _, ok, err := meta.GetBlobRef(ctx, blob.Hash); err != nil || ok {
+		t.Fatalf("blob ref exists = %v err = %v, want removed", ok, err)
+	}
+	if eng.LocalShardExists(ctx, blob.ShardDir, blob.Hash, 0) {
+		t.Fatal("pending blob shard still exists")
 	}
 }

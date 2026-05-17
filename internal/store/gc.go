@@ -70,6 +70,9 @@ func (s *Store) CleanupPendingObjects(ctx context.Context, ttl time.Duration, lo
 }
 
 func (s *Store) deleteExpiredPendingObject(ctx context.Context, meta model.ObjectMeta, logger *slog.Logger) (bool, error) {
+	if err := s.rollbackExpiredPendingWrite(ctx, meta, logger); err != nil {
+		return false, err
+	}
 	if _, exists, err := s.meta.DeleteStagedObjectMeta(ctx, meta.Bucket, meta.Key); err != nil {
 		return false, fmt.Errorf("delete expired staged object metadata: %w", mapStoreError(err))
 	} else if exists {
