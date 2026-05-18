@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/lyonbrown4d/maxio/internal/discovery"
@@ -197,9 +196,9 @@ func (s *Service) handleClusterMember(w http.ResponseWriter, r *http.Request, re
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	id, err := strconv.ParseUint(replicaID, 10, 64)
+	id, err := parseReplicaIDSegment(replicaID)
 	if err != nil {
-		s.writeError(w, err)
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	membership, err := s.raft.GetMembership(r.Context())

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -51,4 +52,18 @@ func normalizeClusterNodes(input map[uint64]string) (map[uint64]string, error) {
 		nodes[replicaID] = target
 	}
 	return nodes, nil
+}
+
+func parseReplicaIDSegment(raw string) (uint64, error) {
+	if raw == "" {
+		return 0, errors.New("replica_id is required")
+	}
+	replicaID, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse replica_id: %w", err)
+	}
+	if replicaID == 0 {
+		return 0, errors.New("replica_id must be greater than zero")
+	}
+	return replicaID, nil
 }

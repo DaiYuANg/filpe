@@ -3,7 +3,6 @@ package handler
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 )
 
 func (s *Service) handleClusterMemberAction(w http.ResponseWriter, r *http.Request, replicaID, action string) {
@@ -11,9 +10,9 @@ func (s *Service) handleClusterMemberAction(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	id, err := strconv.ParseUint(replicaID, 10, 64)
+	id, err := parseReplicaIDSegment(replicaID)
 	if err != nil {
-		s.writeError(w, err)
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	switch action {
