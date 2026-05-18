@@ -16,72 +16,76 @@ import (
 const defaultConfigPath = "./config.json"
 
 type Config struct {
-	HTTPAddress            string `json:"http_address"             koanf:"http_address"             validate:"required,min=1"`
-	HTTPBodyLimit          int    `json:"http_body_limit"          koanf:"http_body_limit"`
-	StorageAddress         string `json:"storage_address"          koanf:"storage_address"`
-	AdminToken             string `json:"admin_token"              koanf:"admin_token"`
-	APIToken               string `json:"api_token"                koanf:"api_token"`
-	S3AccessKey            string `json:"s3_access_key"            koanf:"s3_access_key"`
-	S3SecretKey            string `json:"s3_secret_key"            koanf:"s3_secret_key"`
-	S3Region               string `json:"s3_region"                koanf:"s3_region"`
-	DataDir                string `json:"data_dir"                 koanf:"data_dir"                 validate:"required,min=1"`
-	LogLevel               string `json:"log_level"                koanf:"log_level"                validate:"required,oneof=debug info warn error"`
-	RaftNodeID             uint64 `json:"raft_node_id"             koanf:"raft_node_id"`
-	RaftShardID            uint64 `json:"raft_shard_id"            koanf:"raft_shard_id"`
-	RaftAddress            string `json:"raft_address"             koanf:"raft_address"`
-	RaftDataDir            string `json:"raft_data_dir"            koanf:"raft_data_dir"`
-	RaftBootstrap          bool   `json:"raft_bootstrap"           koanf:"raft_bootstrap"`
-	RaftJoin               bool   `json:"raft_join"                koanf:"raft_join"`
-	RaftInitialMembers     string `json:"raft_initial_members"     koanf:"raft_initial_members"`
-	RaftOperationTimeout   string `json:"raft_operation_timeout"   koanf:"raft_operation_timeout"   validate:"required,min=1"`
-	GossipBindAddress      string `json:"gossip_bind_address"      koanf:"gossip_bind_address"      validate:"required,min=1"`
-	GossipAdvertiseAddress string `json:"gossip_advertise_address" koanf:"gossip_advertise_address"`
-	GossipSeeds            string `json:"gossip_seeds"             koanf:"gossip_seeds"`
-	PendingObjectTTL       string `json:"pending_object_ttl"       koanf:"pending_object_ttl"       validate:"required,min=1"`
-	RepairInterval         string `json:"repair_interval"          koanf:"repair_interval"          validate:"required,min=1"`
-	RepairOnStart          bool   `json:"repair_on_start"          koanf:"repair_on_start"`
-	RepairMaxBatch         int    `json:"repair_max_batch"         koanf:"repair_max_batch"`
-	RepairMaxRetries       int    `json:"repair_max_retries"       koanf:"repair_max_retries"`
-	RepairRateLimit        int    `json:"repair_rate_limit"        koanf:"repair_rate_limit"`
-	RepairRetryBackoff     string `json:"repair_retry_backoff"     koanf:"repair_retry_backoff"     validate:"required,min=1"`
-	DedupeInterval         string `json:"dedupe_interval"          koanf:"dedupe_interval"          validate:"required,min=1"`
-	DedupeOnStart          bool   `json:"dedupe_on_start"          koanf:"dedupe_on_start"`
-	DedupeMaxFixes         int    `json:"dedupe_max_fixes"         koanf:"dedupe_max_fixes"`
-	IndexTimeout           string `json:"index_timeout"            koanf:"index_timeout"            validate:"required,min=1"`
-	IndexRetryBackoff      string `json:"index_retry_backoff"      koanf:"index_retry_backoff"      validate:"required,min=1"`
-	IndexMaxRetries        int    `json:"index_max_retries"        koanf:"index_max_retries"`
-	IndexQueueSize         int    `json:"index_queue_size"         koanf:"index_queue_size"`
-	IndexRateLimit         int    `json:"index_rate_limit"         koanf:"index_rate_limit"`
+	HTTPAddress                  string  `json:"http_address"             koanf:"http_address"             validate:"required,min=1"`
+	HTTPBodyLimit                int     `json:"http_body_limit"          koanf:"http_body_limit"`
+	StorageAddress               string  `json:"storage_address"          koanf:"storage_address"`
+	AdminToken                   string  `json:"admin_token"              koanf:"admin_token"`
+	APIToken                     string  `json:"api_token"                koanf:"api_token"`
+	S3AccessKey                  string  `json:"s3_access_key"            koanf:"s3_access_key"`
+	S3SecretKey                  string  `json:"s3_secret_key"            koanf:"s3_secret_key"`
+	S3Region                     string  `json:"s3_region"                koanf:"s3_region"`
+	DataDir                      string  `json:"data_dir"                 koanf:"data_dir"                 validate:"required,min=1"`
+	LogLevel                     string  `json:"log_level"                koanf:"log_level"                validate:"required,oneof=debug info warn error"`
+	RaftNodeID                   uint64  `json:"raft_node_id"             koanf:"raft_node_id"`
+	RaftShardID                  uint64  `json:"raft_shard_id"            koanf:"raft_shard_id"`
+	RaftAddress                  string  `json:"raft_address"             koanf:"raft_address"`
+	RaftDataDir                  string  `json:"raft_data_dir"            koanf:"raft_data_dir"`
+	RaftBootstrap                bool    `json:"raft_bootstrap"           koanf:"raft_bootstrap"`
+	RaftJoin                     bool    `json:"raft_join"                koanf:"raft_join"`
+	RaftInitialMembers           string  `json:"raft_initial_members"     koanf:"raft_initial_members"`
+	RaftOperationTimeout         string  `json:"raft_operation_timeout"   koanf:"raft_operation_timeout"   validate:"required,min=1"`
+	GossipBindAddress            string  `json:"gossip_bind_address"      koanf:"gossip_bind_address"      validate:"required,min=1"`
+	GossipAdvertiseAddress       string  `json:"gossip_advertise_address" koanf:"gossip_advertise_address"`
+	GossipSeeds                  string  `json:"gossip_seeds"             koanf:"gossip_seeds"`
+	PendingObjectTTL             string  `json:"pending_object_ttl"       koanf:"pending_object_ttl"       validate:"required,min=1"`
+	RepairInterval               string  `json:"repair_interval"          koanf:"repair_interval"          validate:"required,min=1"`
+	RepairOnStart                bool    `json:"repair_on_start"          koanf:"repair_on_start"`
+	RepairMaxBatch               int     `json:"repair_max_batch"         koanf:"repair_max_batch"`
+	RepairMaxRetries             int     `json:"repair_max_retries"       koanf:"repair_max_retries"`
+	RepairRateLimit              int     `json:"repair_rate_limit"        koanf:"repair_rate_limit"`
+	RepairRetryBackoff           string  `json:"repair_retry_backoff"     koanf:"repair_retry_backoff"     validate:"required,min=1"`
+	RepairRetryMaxBackoff        string  `json:"repair_retry_max_backoff" koanf:"repair_retry_max_backoff"`
+	RepairRetryBackoffMultiplier float64 `json:"repair_retry_multiplier"  koanf:"repair_retry_multiplier"`
+	DedupeInterval               string  `json:"dedupe_interval"          koanf:"dedupe_interval"          validate:"required,min=1"`
+	DedupeOnStart                bool    `json:"dedupe_on_start"          koanf:"dedupe_on_start"`
+	DedupeMaxFixes               int     `json:"dedupe_max_fixes"         koanf:"dedupe_max_fixes"`
+	IndexTimeout                 string  `json:"index_timeout"            koanf:"index_timeout"            validate:"required,min=1"`
+	IndexRetryBackoff            string  `json:"index_retry_backoff"      koanf:"index_retry_backoff"      validate:"required,min=1"`
+	IndexMaxRetries              int     `json:"index_max_retries"        koanf:"index_max_retries"`
+	IndexQueueSize               int     `json:"index_queue_size"         koanf:"index_queue_size"`
+	IndexRateLimit               int     `json:"index_rate_limit"         koanf:"index_rate_limit"`
 }
 
 func Default() Config {
 	return Config{
-		HTTPAddress:          ":8080",
-		HTTPBodyLimit:        1 << 30,
-		StorageAddress:       "127.0.0.1:8080",
-		S3Region:             "us-east-1",
-		DataDir:              "./data",
-		LogLevel:             "info",
-		RaftNodeID:           1,
-		RaftShardID:          1,
-		RaftAddress:          "127.0.0.1:63000",
-		RaftDataDir:          "raft",
-		RaftBootstrap:        true,
-		RaftOperationTimeout: "5s",
-		GossipBindAddress:    "0.0.0.0:7946",
-		PendingObjectTTL:     "1h",
-		RepairInterval:       "10m",
-		RepairOnStart:        true,
-		RepairMaxBatch:       100,
-		RepairMaxRetries:     2,
-		RepairRetryBackoff:   "1s",
-		DedupeInterval:       "30m",
-		DedupeOnStart:        true,
-		DedupeMaxFixes:       100,
-		IndexTimeout:         "30s",
-		IndexRetryBackoff:    "1s",
-		IndexMaxRetries:      2,
-		IndexQueueSize:       1024,
+		HTTPAddress:                  ":8080",
+		HTTPBodyLimit:                1 << 30,
+		StorageAddress:               "127.0.0.1:8080",
+		S3Region:                     "us-east-1",
+		DataDir:                      "./data",
+		LogLevel:                     "info",
+		RaftNodeID:                   1,
+		RaftShardID:                  1,
+		RaftAddress:                  "127.0.0.1:63000",
+		RaftDataDir:                  "raft",
+		RaftBootstrap:                true,
+		RaftOperationTimeout:         "5s",
+		GossipBindAddress:            "0.0.0.0:7946",
+		PendingObjectTTL:             "1h",
+		RepairInterval:               "10m",
+		RepairOnStart:                true,
+		RepairMaxBatch:               100,
+		RepairMaxRetries:             2,
+		RepairRetryBackoff:           "1s",
+		RepairRetryMaxBackoff:        "10s",
+		RepairRetryBackoffMultiplier: 2,
+		DedupeInterval:               "30m",
+		DedupeOnStart:                true,
+		DedupeMaxFixes:               100,
+		IndexTimeout:                 "30s",
+		IndexRetryBackoff:            "1s",
+		IndexMaxRetries:              2,
+		IndexQueueSize:               1024,
 	}
 }
 
@@ -183,6 +187,7 @@ func trim(cfg Config) Config {
 	cfg.PendingObjectTTL = strings.TrimSpace(cfg.PendingObjectTTL)
 	cfg.RepairInterval = strings.TrimSpace(cfg.RepairInterval)
 	cfg.RepairRetryBackoff = strings.TrimSpace(cfg.RepairRetryBackoff)
+	cfg.RepairRetryMaxBackoff = strings.TrimSpace(cfg.RepairRetryMaxBackoff)
 	cfg.DedupeInterval = strings.TrimSpace(cfg.DedupeInterval)
 	cfg.IndexTimeout = strings.TrimSpace(cfg.IndexTimeout)
 	cfg.IndexRetryBackoff = strings.TrimSpace(cfg.IndexRetryBackoff)
@@ -245,8 +250,14 @@ func applyRepairZeroDefaults(cfg Config) Config {
 	if cfg.RepairRetryBackoff == "" {
 		cfg.RepairRetryBackoff = Default().RepairRetryBackoff
 	}
+	if cfg.RepairRetryMaxBackoff == "" {
+		cfg.RepairRetryMaxBackoff = Default().RepairRetryMaxBackoff
+	}
 	if cfg.RepairMaxBatch <= 0 {
 		cfg.RepairMaxBatch = Default().RepairMaxBatch
+	}
+	if cfg.RepairRetryBackoffMultiplier <= 0 {
+		cfg.RepairRetryBackoffMultiplier = Default().RepairRetryBackoffMultiplier
 	}
 	return cfg
 }
@@ -259,34 +270,6 @@ func applyDedupeZeroDefaults(cfg Config) Config {
 		cfg.DedupeMaxFixes = Default().DedupeMaxFixes
 	}
 	return cfg
-}
-
-func validateDurations(cfg Config) error {
-	if _, err := time.ParseDuration(cfg.RaftOperationTimeout); err != nil {
-		return fmt.Errorf("invalid config: raft_operation_timeout: %w", err)
-	}
-	if _, err := time.ParseDuration(cfg.PendingObjectTTL); err != nil {
-		return fmt.Errorf("invalid config: pending_object_ttl: %w", err)
-	}
-	if _, err := time.ParseDuration(cfg.RepairInterval); err != nil {
-		return fmt.Errorf("invalid config: repair_interval: %w", err)
-	}
-	if _, err := time.ParseDuration(cfg.RepairRetryBackoff); err != nil {
-		return fmt.Errorf("invalid config: repair_retry_backoff: %w", err)
-	}
-	if cfg.RepairMaxRetries < 0 {
-		return errors.New("invalid config: repair_max_retries must be non-negative")
-	}
-	if cfg.RepairRateLimit < 0 {
-		return errors.New("invalid config: repair_rate_limit must be non-negative")
-	}
-	if _, err := time.ParseDuration(cfg.DedupeInterval); err != nil {
-		return fmt.Errorf("invalid config: dedupe_interval: %w", err)
-	}
-	if cfg.DedupeMaxFixes < 0 {
-		return errors.New("invalid config: dedupe_max_fixes must be non-negative")
-	}
-	return validateIndexConfig(cfg)
 }
 
 func (cfg Config) RaftOperationTimeoutDuration() time.Duration {

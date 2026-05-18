@@ -30,7 +30,9 @@ type Summary struct {
 	ChecksumFailed  int     `json:"checksum_failed"`
 	RepairAttempts  int     `json:"repair_attempts"`
 	RepairRetries   int     `json:"repair_retries"`
+	RetryDelayMs    int64   `json:"retry_delay_ms"`
 	Throttled       int     `json:"throttled"`
+	ThrottleWaitMs  int64   `json:"throttle_wait_ms"`
 	RepairedObjects int     `json:"repaired_objects"`
 	RepairedShards  int     `json:"repaired_shards"`
 	Unrecoverable   int     `json:"unrecoverable"`
@@ -253,12 +255,13 @@ func repairObject(
 		)
 		return nil
 	}
-	throttled, err := limiter.Wait(ctx)
+	throttled, waited, err := limiter.Wait(ctx)
 	if err != nil {
 		return err
 	}
 	if throttled {
 		summary.Throttled++
+		summary.ThrottleWaitMs += waited.Milliseconds()
 	}
 	summary.RepairAttempts++
 	repairedShards, err := repairObjectWithRetry(ctx, runtime, meta, summary)

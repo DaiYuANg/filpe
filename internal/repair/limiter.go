@@ -18,25 +18,25 @@ func newRepairLimiter(rateLimit int) *repairLimiter {
 	return &repairLimiter{interval: time.Second / time.Duration(rateLimit)}
 }
 
-func (limiter *repairLimiter) Wait(ctx context.Context) (bool, error) {
+func (limiter *repairLimiter) Wait(ctx context.Context) (bool, time.Duration, error) {
 	if limiter == nil || limiter.interval <= 0 {
-		return false, nil
+		return false, 0, nil
 	}
 	now := time.Now()
 	if limiter.next.IsZero() {
 		limiter.next = now.Add(limiter.interval)
-		return false, nil
+		return false, 0, nil
 	}
 	wait := time.Until(limiter.next)
 	if wait <= 0 {
 		limiter.next = now.Add(limiter.interval)
-		return false, nil
+		return false, 0, nil
 	}
 	if err := sleepRepairLimit(ctx, wait); err != nil {
-		return false, err
+		return false, 0, err
 	}
 	limiter.next = time.Now().Add(limiter.interval)
-	return true, nil
+	return true, wait, nil
 }
 
 func sleepRepairLimit(ctx context.Context, wait time.Duration) error {

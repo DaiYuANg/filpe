@@ -18,6 +18,21 @@ func (cfg Config) RepairRetryBackoffDuration() time.Duration {
 	return duration
 }
 
+func (cfg Config) RepairRetryMaxBackoffDuration() time.Duration {
+	duration, err := time.ParseDuration(cfg.RepairRetryMaxBackoff)
+	if err != nil {
+		return 10 * time.Second
+	}
+	return duration
+}
+
+func (cfg Config) RepairRetryMultiplier() float64 {
+	if cfg.RepairRetryBackoffMultiplier <= 1 {
+		return 1
+	}
+	return cfg.RepairRetryBackoffMultiplier
+}
+
 func (cfg Config) DedupeIntervalDuration() time.Duration {
 	duration, err := time.ParseDuration(cfg.DedupeInterval)
 	if err != nil {

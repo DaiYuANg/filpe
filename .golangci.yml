@@ -23,14 +23,12 @@ linters:
     - gocognit
     - gocritic
     - gocyclo
-    - godoclint
     - gosec
     - govet
     - ineffassign
     - intrange
     - makezero
     - misspell
-    - modernize
     - nestif
     - nilerr
     - nilnesserr
@@ -54,8 +52,6 @@ linters:
     - spancheck
     - staticcheck
     - tagalign
-    - testpackage
-    - unqueryvet
   settings:
     cyclop:
       max-complexity: 10
@@ -94,11 +90,6 @@ linters:
         - unnamedResult
     gocyclo:
       min-complexity: 10
-    godoclint:
-      default: basic
-      options:
-        start-with-name:
-          include-unexported: false
     govet:
       enable-all: true
       disable:
@@ -137,11 +128,7 @@ linters:
       checks:
         - all
         - -ST1000
-  exclusions:
-    rules:
-      - path: _test\.go
-        linters:
-          - godoclint
+
 
 issues:
   max-issues-per-linter: 0

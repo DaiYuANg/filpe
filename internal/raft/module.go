@@ -94,6 +94,9 @@ func newRuntimeConfig(cfg config.Config) (*runtimeConfig, error) {
 		operationTimeout: cfg.RaftOperationTimeoutDuration(),
 	}
 	rtCfg.applyDefaults()
+	if err := rtCfg.applyStartupMode(); err != nil {
+		return nil, err
+	}
 	if validateErr := validateInitialMembers(rtCfg); validateErr != nil {
 		return nil, validateErr
 	}

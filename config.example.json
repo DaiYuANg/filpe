@@ -27,6 +27,8 @@
   "repair_max_retries": 2,
   "repair_rate_limit": 0,
   "repair_retry_backoff": "1s",
+  "repair_retry_max_backoff": "10s",
+  "repair_retry_multiplier": 2,
   "index_timeout": "30s",
   "index_retry_backoff": "1s",
   "index_max_retries": 2,
