@@ -1,0 +1,22 @@
+package repair
+
+func summaryAttrs(summary Summary) []any {
+	return []any{
+		"buckets", summary.Buckets,
+		"objects", summary.Objects,
+		"unhealthy", summary.Unhealthy,
+		"missing", summary.Missing,
+		"corrupted", summary.Corrupted,
+		"scrubbed", summary.Scrubbed,
+		"scrub_failed", summary.ScrubFailed,
+		"checksum_failed", summary.ChecksumFailed,
+		"repair_attempts", summary.RepairAttempts,
+		"repair_retries", summary.RepairRetries,
+		"throttled", summary.Throttled,
+		"repaired_objects", summary.RepairedObjects,
+		"repaired_shards", summary.RepairedShards,
+		"unrecoverable", summary.Unrecoverable,
+		"failed", summary.Failed,
+		"limited", summary.Limited,
+	}
+}

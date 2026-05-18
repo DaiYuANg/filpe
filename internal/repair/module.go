@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 
 	"github.com/arcgolabs/dix"
 	gocron "github.com/go-co-op/gocron/v2"
@@ -48,6 +49,9 @@ type Runtime struct {
 	logger    *slog.Logger
 	mu        sync.RWMutex
 	status    Status
+	history   []RunRecord
+	issues    map[string][]Issue
+	nextRunID atomic.Uint64
 }
 
 func Module() dix.Module {
@@ -76,6 +80,7 @@ func NewRuntime(
 		objects:   objects,
 		scheduler: schedulerRuntime,
 		logger:    logger,
+		issues:    make(map[string][]Issue),
 	}
 }
 
@@ -137,38 +142,18 @@ func (runtime *Runtime) runScheduled(ctx context.Context) {
 	runtime.logger.DebugContext(ctx, "object repair job completed", attrs...)
 }
 
-func summaryAttrs(summary Summary) []any {
-	return []any{
-		"buckets", summary.Buckets,
-		"objects", summary.Objects,
-		"unhealthy", summary.Unhealthy,
-		"missing", summary.Missing,
-		"corrupted", summary.Corrupted,
-		"scrubbed", summary.Scrubbed,
-		"scrub_failed", summary.ScrubFailed,
-		"checksum_failed", summary.ChecksumFailed,
-		"repair_attempts", summary.RepairAttempts,
-		"repair_retries", summary.RepairRetries,
-		"throttled", summary.Throttled,
-		"repaired_objects", summary.RepairedObjects,
-		"repaired_shards", summary.RepairedShards,
-		"unrecoverable", summary.Unrecoverable,
-		"failed", summary.Failed,
-		"limited", summary.Limited,
-	}
-}
-
 func (runtime *Runtime) RunOnce(ctx context.Context) (Summary, error) {
 	if runtime == nil {
 		return Summary{}, errors.New("repair runtime unavailable")
 	}
-	startedAt, started := runtime.tryMarkStarted()
+	runID := runtime.newRunID()
+	startedAt, started := runtime.tryMarkStarted(runID)
 	if !started {
 		return Summary{}, ErrRepairAlreadyRunning
 	}
 
 	summary, err := runtime.runOnce(ctx)
-	runtime.markFinished(startedAt, summary, err)
+	runtime.markFinished(startedAt, runID, summary, err)
 
 	return summary, err
 }

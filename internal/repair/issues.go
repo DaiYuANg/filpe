@@ -1,10 +1,26 @@
 package repair
 
 import (
+	"time"
+
 	"github.com/lyonbrown4d/maxio/object"
 )
 
-const maxRepairIssues = 50
+const (
+	maxRepairIssues  = 50
+	maxRepairHistory = 20
+)
+
+// RunRecord reports one completed repair run.
+type RunRecord struct {
+	RunID      string    `json:"run_id"`
+	StartedAt  time.Time `json:"started_at,omitzero"`
+	FinishedAt time.Time `json:"finished_at,omitzero"`
+	Duration   int64     `json:"duration_ms"`
+	Error      string    `json:"error,omitempty"`
+	Summary    Summary   `json:"summary"`
+	IssueCount int       `json:"issue_count"`
+}
 
 const (
 	IssueHealthCheckFailed   = "health_check_failed"
@@ -50,4 +66,10 @@ func issueFromHealth(meta *object.ObjectMeta, health object.Health, kind, reason
 		TotalChunks: health.TotalChunks,
 		Recoverable: health.Recoverable,
 	}
+}
+
+func (summary Summary) withoutIssues() Summary {
+	summaryCopy := summary
+	summaryCopy.Issues = nil
+	return summaryCopy
 }
