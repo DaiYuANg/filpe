@@ -68,6 +68,9 @@ func (runtime *Runtime) recordRun(startedAt time.Time, runID string, summary Sum
 	if runID == "" {
 		runID = runtime.newRunID()
 	}
+	if runtime.issues == nil {
+		runtime.issues = make(map[string][]Issue)
+	}
 	record := RunRecord{
 		RunID:      runID,
 		StartedAt:  startedAt,
