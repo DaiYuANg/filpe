@@ -203,7 +203,12 @@ func validateDesiredReplicaTargets(current Membership, desired map[uint64]string
 	}
 	for replicaID, target := range desired {
 		if existing, ok := current.Nodes[replicaID]; ok && existing != target {
-			return fmt.Errorf("raft replica %d target cannot be changed from %q to %q", replicaID, existing, target)
+			return fmt.Errorf(
+				"raft replica %d target cannot be changed from %q to %q; use replacement flow",
+				replicaID,
+				existing,
+				target,
+			)
 		}
 	}
 	return nil

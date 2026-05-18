@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"strings"
 
+	"math"
+
+	raftx "github.com/lyonbrown4d/maxio/internal/raft"
 	"github.com/lyonbrown4d/maxio/object"
 )
 
@@ -66,12 +69,26 @@ func (s *Service) replaceClusterMember(
 	oldReplicaID uint64,
 	req replacementReplicaRequest,
 ) (replacementReplicaResponse, error) {
-	if oldReplicaID == req.ReplicaID {
-		return replacementReplicaResponse{}, errors.New("replacement replica must be different from old replica")
-	}
 	if s == nil || s.raft == nil || s.engine == nil || s.objects == nil {
 		return replacementReplicaResponse{}, errors.New("cluster replacement dependencies unavailable")
 	}
+
+	membership, err := s.raft.GetMembership(ctx)
+	if err != nil {
+		return replacementReplicaResponse{}, fmt.Errorf("get raft membership: %w", err)
+	}
+	if membership.LocalReplicaID == oldReplicaID {
+		return replacementReplicaResponse{}, errors.New("cannot replace local raft replica")
+	}
+	if _, ok := membership.Nodes[oldReplicaID]; !ok {
+		return replacementReplicaResponse{}, fmt.Errorf("old replica %d is missing from raft membership", oldReplicaID)
+	}
+	replacementReplicaID, err := resolveReplacementReplicaID(oldReplicaID, req.ReplicaID, membership)
+	if err != nil {
+		return replacementReplicaResponse{}, err
+	}
+	req.ReplicaID = replacementReplicaID
+
 	rebalance, err := s.runClusterMemberReplacement(ctx, oldReplicaID, req)
 	if err != nil {
 		return replacementReplicaResponse{}, err
@@ -84,6 +101,57 @@ func (s *Service) replaceClusterMember(
 		Shards:       rebalance.Shards,
 		Status:       "replaced",
 	}, nil
+}
+
+func resolveReplacementReplicaID(oldReplicaID, requestedReplicaID uint64, membership raftx.Membership) (uint64, error) {
+	if requestedReplicaID != oldReplicaID {
+		return requestedReplicaID, nil
+	}
+	if len(membership.Nodes) == 0 {
+		return oldReplicaID + 1, nil
+	}
+
+	maxReplicaID := maxMembershipReplicaID(oldReplicaID, membership)
+	if maxReplicaID == math.MaxUint64 {
+		return 0, errors.New("cannot auto-assign replacement replica_id: id space is exhausted")
+	}
+
+	usedIDs := buildReplicaIDSet(membership)
+	for candidate := maxReplicaID + 1; ; candidate++ {
+		if _, used := usedIDs[candidate]; !used {
+			return candidate, nil
+		}
+		if candidate == math.MaxUint64 {
+			return 0, errors.New("cannot auto-assign replacement replica_id: id space is exhausted")
+		}
+	}
+}
+
+func maxMembershipReplicaID(baseID uint64, membership raftx.Membership) uint64 {
+	maxReplicaID := baseID
+	for replicaID := range membership.Nodes {
+		if replicaID > maxReplicaID {
+			maxReplicaID = replicaID
+		}
+	}
+	for _, replicaID := range membership.Removed {
+		if replicaID > maxReplicaID {
+			maxReplicaID = replicaID
+		}
+	}
+	return maxReplicaID
+}
+
+func buildReplicaIDSet(membership raftx.Membership) map[uint64]struct{} {
+	total := len(membership.Nodes) + len(membership.Removed)
+	used := make(map[uint64]struct{}, total)
+	for id := range membership.Nodes {
+		used[id] = struct{}{}
+	}
+	for _, id := range membership.Removed {
+		used[id] = struct{}{}
+	}
+	return used
 }
 
 func (s *Service) runClusterMemberReplacement(
