@@ -115,6 +115,9 @@ func (d *protocolMD5) finish() {
 }
 
 func (d *protocolMD5) block(data []byte) {
+	if len(data) < protocolMD5BlockSize {
+		return
+	}
 	var words [16]uint32
 	for index := range words {
 		offset := index * 4
@@ -123,8 +126,9 @@ func (d *protocolMD5) block(data []byte) {
 
 	a, b, c, v := d.state[0], d.state[1], d.state[2], d.state[3]
 	for round := range 64 {
-		f, g := protocolMD5Round(round, b, c, v)
-		a, b, c, v = v, b+bits.RotateLeft32(a+f+protocolMD5Table[round]+words[g], int(protocolMD5Shift[round])), b, c
+		f := protocolMD5Round(round, b, c, v)
+		word := protocolMD5Word(round, words)
+		a, b, c, v = v, b+bits.RotateLeft32(a+f+protocolMD5Table[round]+word, int(protocolMD5Shift[round])), b, c
 	}
 	d.state[0] += a
 	d.state[1] += b
@@ -132,15 +136,78 @@ func (d *protocolMD5) block(data []byte) {
 	d.state[3] += v
 }
 
-func protocolMD5Round(round int, b, c, d uint32) (uint32, int) {
+func protocolMD5Round(round int, b, c, d uint32) uint32 {
 	switch {
 	case round < 16:
-		return (b & c) | (^b & d), round
+		return (b & c) | (^b & d)
 	case round < 32:
-		return (d & b) | (^d & c), (5*round + 1) % 16
+		return (d & b) | (^d & c)
 	case round < 48:
-		return b ^ c ^ d, (3*round + 5) % 16
+		return b ^ c ^ d
 	default:
-		return c ^ (b | ^d), (7 * round) % 16
+		return c ^ (b | ^d)
+	}
+}
+
+func protocolMD5Word(round int, words [16]uint32) uint32 {
+	index := protocolMD5WordIndex(round)
+	if index < 8 {
+		return protocolMD5WordLow(index, words)
+	}
+	return protocolMD5WordHigh(index, words)
+}
+
+func protocolMD5WordLow(index int, words [16]uint32) uint32 {
+	switch index {
+	case 0:
+		return words[0]
+	case 1:
+		return words[1]
+	case 2:
+		return words[2]
+	case 3:
+		return words[3]
+	case 4:
+		return words[4]
+	case 5:
+		return words[5]
+	case 6:
+		return words[6]
+	default:
+		return words[7]
+	}
+}
+
+func protocolMD5WordHigh(index int, words [16]uint32) uint32 {
+	switch index {
+	case 8:
+		return words[8]
+	case 9:
+		return words[9]
+	case 10:
+		return words[10]
+	case 11:
+		return words[11]
+	case 12:
+		return words[12]
+	case 13:
+		return words[13]
+	case 14:
+		return words[14]
+	default:
+		return words[15]
+	}
+}
+
+func protocolMD5WordIndex(round int) int {
+	switch {
+	case round < 16:
+		return round
+	case round < 32:
+		return (5*round + 1) % 16
+	case round < 48:
+		return (3*round + 5) % 16
+	default:
+		return (7 * round) % 16
 	}
 }

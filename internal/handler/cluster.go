@@ -45,6 +45,11 @@ func (s *Service) handleClusterBootstrap(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if membershipStatesMatch(membership.Nodes, nodes) {
+		err = s.syncStorageNodes(r.Context())
+		if err != nil {
+			s.writeError(w, err)
+			return
+		}
 		s.writeJSON(w, http.StatusOK, map[string]any{
 			"status":  "already_bootstrapped",
 			"members": len(nodes),
@@ -56,7 +61,8 @@ func (s *Service) handleClusterBootstrap(w http.ResponseWriter, r *http.Request)
 		s.writeError(w, err)
 		return
 	}
-	if err := s.syncStorageNodes(r.Context()); err != nil {
+	err = s.syncStorageNodes(r.Context())
+	if err != nil {
 		s.writeError(w, err)
 		return
 	}
@@ -76,6 +82,36 @@ func membershipStatesMatch(current, desired map[uint64]string) bool {
 	return true
 }
 
+func (s *Service) maybeHandleExistingReplica(
+	w http.ResponseWriter,
+	r *http.Request,
+	replicaID uint64,
+	target string,
+	nodes map[uint64]string,
+	status string,
+) bool {
+	currentTarget, exists := nodes[replicaID]
+	if !exists {
+		return false
+	}
+	if currentTarget == target {
+		if err := s.syncStorageNodes(r.Context()); err != nil {
+			s.writeError(w, err)
+			return true
+		}
+		s.writeJSON(w, http.StatusOK, map[string]any{
+			"replica_id": replicaID,
+			"target":     target,
+			"status":     status,
+		})
+		return true
+	}
+	s.writeJSON(w, http.StatusConflict, map[string]string{
+		"error": fmt.Sprintf("raft replica %d already exists with different target", replicaID),
+	})
+	return true
+}
+
 func (s *Service) handleClusterJoin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -92,25 +128,16 @@ func (s *Service) handleClusterJoin(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	if currentTarget, exists := membership.Nodes[req.ReplicaID]; exists {
-		if currentTarget == req.Target {
-			s.writeJSON(w, http.StatusOK, map[string]any{
-				"replica_id": req.ReplicaID,
-				"target":     req.Target,
-				"status":     "already_joined",
-			})
-			return
-		}
-		s.writeJSON(w, http.StatusConflict, map[string]string{
-			"error": fmt.Sprintf("raft replica %d already exists with different target", req.ReplicaID),
-		})
+	if s.maybeHandleExistingReplica(w, r, req.ReplicaID, req.Target, membership.Nodes, "already_joined") {
 		return
 	}
-	if err := s.raft.AddReplica(r.Context(), req.ReplicaID, req.Target); err != nil {
+	err = s.raft.AddReplica(r.Context(), req.ReplicaID, req.Target)
+	if err != nil {
 		s.writeError(w, err)
 		return
 	}
-	if err := s.syncStorageNodes(r.Context()); err != nil {
+	err = s.syncStorageNodes(r.Context())
+	if err != nil {
 		s.writeError(w, err)
 		return
 	}
@@ -142,25 +169,16 @@ func (s *Service) handleAddClusterMember(w http.ResponseWriter, r *http.Request)
 		s.writeError(w, err)
 		return
 	}
-	if currentTarget, exists := membership.Nodes[req.ReplicaID]; exists {
-		if currentTarget == req.Target {
-			s.writeJSON(w, http.StatusOK, map[string]any{
-				"replica_id": req.ReplicaID,
-				"target":     req.Target,
-				"status":     "already_added",
-			})
-			return
-		}
-		s.writeJSON(w, http.StatusConflict, map[string]string{
-			"error": fmt.Sprintf("raft replica %d already exists with different target", req.ReplicaID),
-		})
+	if s.maybeHandleExistingReplica(w, r, req.ReplicaID, req.Target, membership.Nodes, "already_added") {
 		return
 	}
-	if err := s.raft.AddReplica(r.Context(), req.ReplicaID, req.Target); err != nil {
+	err = s.raft.AddReplica(r.Context(), req.ReplicaID, req.Target)
+	if err != nil {
 		s.writeError(w, err)
 		return
 	}
-	if err := s.syncStorageNodes(r.Context()); err != nil {
+	err = s.syncStorageNodes(r.Context())
+	if err != nil {
 		s.writeError(w, err)
 		return
 	}
@@ -183,7 +201,8 @@ func (s *Service) handleSyncClusterMembers(w http.ResponseWriter, r *http.Reques
 		s.writeError(w, err)
 		return
 	}
-	if err := s.syncStorageNodes(r.Context()); err != nil {
+	err = s.syncStorageNodes(r.Context())
+	if err != nil {
 		s.writeError(w, err)
 		return
 	}
@@ -216,15 +235,18 @@ func (s *Service) handleClusterMember(w http.ResponseWriter, r *http.Request, re
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if err := s.ensureClusterMemberDecommissionable(r.Context(), id); err != nil {
+	err = s.ensureClusterMemberDecommissionable(r.Context(), id)
+	if err != nil {
 		s.writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}
-	if err := s.raft.RemoveReplica(r.Context(), id); err != nil {
+	err = s.raft.RemoveReplica(r.Context(), id)
+	if err != nil {
 		s.writeError(w, err)
 		return
 	}
-	if err := s.syncStorageNodes(r.Context()); err != nil {
+	err = s.syncStorageNodes(r.Context())
+	if err != nil {
 		s.writeError(w, err)
 		return
 	}
