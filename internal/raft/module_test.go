@@ -51,6 +51,37 @@ func TestApplyStartupModeKeepsBootstrapForFreshRaftDir(t *testing.T) {
 	}
 }
 
+func TestApplyStartupModeRebuildsBootstrapWhenInitialMembersProvided(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.Default()
+	cfg.RaftDataDir = t.TempDir()
+	cfg.RaftBootstrap = false
+	cfg.RaftJoin = false
+	cfg.RaftInitialMembers = "1=127.0.0.1:63001,2=127.0.0.1:63002"
+
+	join, err := raft.EffectiveRaftJoinMode(cfg)
+	if err != nil {
+		t.Fatalf("newRuntimeConfig: %v", err)
+	}
+	if join {
+		t.Fatalf("expected bootstrap mode for initial members on fresh raft data directory")
+	}
+}
+
+func TestApplyStartupModeRequiresModeForFreshRaftDir(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.Default()
+	cfg.RaftDataDir = t.TempDir()
+	cfg.RaftBootstrap = false
+	cfg.RaftJoin = false
+
+	if _, err := raft.EffectiveRaftJoinMode(cfg); err == nil {
+		t.Fatalf("expected startup mode resolution error for unspecified mode")
+	}
+}
+
 func TestApplyStartupModePrefersJoinFlag(t *testing.T) {
 	t.Parallel()
 

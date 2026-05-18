@@ -12,7 +12,7 @@ func (cfg *runtimeConfig) applyStartupMode() error {
 	if cfg == nil {
 		return errors.New("raft runtime config is required")
 	}
-	if cfg.join || !cfg.bootstrap {
+	if cfg.join {
 		return nil
 	}
 	exists, err := hasRaftState(cfg.nodeHostDir)
@@ -21,8 +21,17 @@ func (cfg *runtimeConfig) applyStartupMode() error {
 	}
 	if exists {
 		cfg.join = true
+		cfg.bootstrap = false
+		return nil
 	}
-	return nil
+	if len(cfg.initialMembers) > 0 {
+		cfg.bootstrap = true
+		return nil
+	}
+	if cfg.bootstrap {
+		return nil
+	}
+	return errors.New("raft startup mode: set raft_bootstrap or raft_join true, or provide raft_initial_members for first boot")
 }
 
 func hasRaftState(path string) (bool, error) {
