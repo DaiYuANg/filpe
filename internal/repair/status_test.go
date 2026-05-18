@@ -31,7 +31,7 @@ func TestRuntimeSetProgress(t *testing.T) {
 		t.Fatalf("expected bucket bucket-a, got %q", status.Progress.Bucket)
 	}
 
-	runtime.markFinished(startedAt, "run-1", Summary{}, nil)
+	runtime.markFinished(startedAt, "run-1", "", "", Summary{}, nil)
 	if runtime.status.Progress != nil {
 		t.Fatal("progress should be cleared after successful run")
 	}
@@ -59,7 +59,7 @@ func TestRuntimeMarkFinishedStoresRunIDInLastSummary(t *testing.T) {
 	runtime := &Runtime{}
 
 	startedAt, _ := runtime.tryMarkStarted("run-1")
-	runtime.markFinished(startedAt, "run-1", Summary{RunID: "run-1", Buckets: 2}, nil)
+	runtime.markFinished(startedAt, "run-1", "", "", Summary{RunID: "run-1", Buckets: 2}, nil)
 	status := runtime.Status()
 
 	if status.LastSummary.RunID != "run-1" {
@@ -77,7 +77,7 @@ func TestRuntimeMarkFinishedStoresErrorKindAndTrigger(t *testing.T) {
 	runtime.setRunTrigger(repairRunTriggerManual)
 	startedAt, _ := runtime.tryMarkStarted("run-1")
 	markErr := fmt.Errorf("mark failed: %w", object.ErrNotFound)
-	runtime.markFinished(startedAt, "run-1", Summary{}, markErr)
+	runtime.markFinished(startedAt, "run-1", "", "", Summary{}, markErr)
 
 	status := runtime.Status()
 	if status.LastErrorKind != repairErrorKindNotFound {
@@ -97,7 +97,7 @@ func TestRuntimeHistoryRecordsErrorKindAndTrigger(t *testing.T) {
 	runtime := &Runtime{}
 	runtime.setRunTrigger(repairRunTriggerScheduled)
 	startedAt, _ := runtime.tryMarkStarted("run-1")
-	runtime.markFinished(startedAt, "run-1", Summary{}, nil)
+	runtime.markFinished(startedAt, "run-1", "", "", Summary{}, nil)
 
 	history, total := runtime.History(0, 10)
 	if total != 1 {
@@ -111,5 +111,44 @@ func TestRuntimeHistoryRecordsErrorKindAndTrigger(t *testing.T) {
 	}
 	if history[0].ErrorKind != "" {
 		t.Fatalf("expected no error kind for success, got %q", history[0].ErrorKind)
+	}
+}
+
+func TestRuntimeMarkFinishedStoresScope(t *testing.T) {
+	t.Parallel()
+
+	runtime := &Runtime{}
+	startedAt, _ := runtime.tryMarkStarted("run-1")
+	runtime.markFinished(startedAt, "run-1", "bucket-a", "photos/", Summary{}, nil)
+
+	status := runtime.Status()
+	if status.LastBucket != "bucket-a" {
+		t.Fatalf("expected last bucket %q, got %q", "bucket-a", status.LastBucket)
+	}
+	if status.LastPrefix != "photos/" {
+		t.Fatalf("expected last prefix %q, got %q", "photos/", status.LastPrefix)
+	}
+}
+
+func TestRuntimeHistoryRecordsScope(t *testing.T) {
+	t.Parallel()
+
+	runtime := &Runtime{}
+	runtime.setRunTrigger(repairRunTriggerManual)
+	startedAt, _ := runtime.tryMarkStarted("run-1")
+	runtime.markFinished(startedAt, "run-1", "bucket-b", "inbox", Summary{}, nil)
+
+	history, total := runtime.History(0, 10)
+	if total != 1 {
+		t.Fatalf("expected total history 1, got %d", total)
+	}
+	if len(history) != 1 {
+		t.Fatalf("expected one history item, got %d", len(history))
+	}
+	if history[0].Bucket != "bucket-b" {
+		t.Fatalf("expected history bucket %q, got %q", "bucket-b", history[0].Bucket)
+	}
+	if history[0].Prefix != "inbox" {
+		t.Fatalf("expected history prefix %q, got %q", "inbox", history[0].Prefix)
 	}
 }

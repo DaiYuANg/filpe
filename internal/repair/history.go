@@ -2,6 +2,7 @@ package repair
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -64,6 +65,8 @@ func (runtime *Runtime) Issues(runID string, offset, limit int) ([]Issue, int, b
 func (runtime *Runtime) recordRun(
 	startedAt time.Time,
 	runID string,
+	bucket string,
+	prefix string,
 	summary Summary,
 	err error,
 	trigger string,
@@ -83,6 +86,8 @@ func (runtime *Runtime) recordRun(
 	}
 	record := RunRecord{
 		RunID:      runID,
+		Bucket:     strings.TrimSpace(bucket),
+		Prefix:     strings.TrimSpace(prefix),
 		Trigger:    trigger,
 		StartedAt:  startedAt,
 		FinishedAt: time.Now(),

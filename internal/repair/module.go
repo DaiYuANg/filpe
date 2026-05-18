@@ -161,9 +161,15 @@ func (runtime *Runtime) setRunTrigger(trigger string) {
 }
 
 func (runtime *Runtime) RunOnce(ctx context.Context) (Summary, error) {
+	return runtime.RunOnceWithScope(ctx, "", "")
+}
+
+func (runtime *Runtime) RunOnceWithScope(ctx context.Context, bucket, prefix string) (Summary, error) {
 	if runtime == nil {
 		return Summary{}, errors.New("repair runtime unavailable")
 	}
+	bucket = strings.TrimSpace(bucket)
+	prefix = strings.TrimSpace(prefix)
 	runtime.setRunTrigger(repairRunTriggerManual)
 	runID := runtime.newRunID()
 	startedAt, started := runtime.tryMarkStarted(runID)
@@ -171,8 +177,8 @@ func (runtime *Runtime) RunOnce(ctx context.Context) (Summary, error) {
 		return Summary{}, ErrRepairAlreadyRunning
 	}
 
-	summary, err := runtime.runOnce(ctx, runID)
-	runtime.markFinished(startedAt, runID, summary, err)
+	summary, err := runtime.runOnce(ctx, runID, bucket, prefix)
+	runtime.markFinished(startedAt, runID, bucket, prefix, summary, err)
 
 	return summary, err
 }

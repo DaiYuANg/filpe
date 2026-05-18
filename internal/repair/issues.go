@@ -18,6 +18,8 @@ const (
 // RunRecord reports one completed repair run.
 type RunRecord struct {
 	RunID      string    `json:"run_id"`
+	Bucket     string    `json:"bucket,omitempty"`
+	Prefix     string    `json:"prefix,omitempty"`
 	Trigger    string    `json:"trigger"`
 	StartedAt  time.Time `json:"started_at,omitzero"`
 	FinishedAt time.Time `json:"finished_at,omitzero"`

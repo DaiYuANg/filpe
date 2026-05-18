@@ -9,6 +9,8 @@ import (
 type Status struct {
 	Running        bool               `json:"running"`
 	LastRunID      string             `json:"last_run_id,omitempty"`
+	LastBucket     string             `json:"last_bucket,omitempty"`
+	LastPrefix     string             `json:"last_prefix,omitempty"`
 	LastTrigger    string             `json:"last_trigger,omitempty"`
 	LastStartedAt  time.Time          `json:"last_started_at,omitzero"`
 	LastFinishedAt time.Time          `json:"last_finished_at,omitzero"`
@@ -59,7 +61,7 @@ func (runtime *Runtime) tryMarkStarted(runID string) (time.Time, bool) {
 	return now, true
 }
 
-func (runtime *Runtime) markFinished(startedAt time.Time, runID string, summary Summary, err error) {
+func (runtime *Runtime) markFinished(startedAt time.Time, runID, bucket, prefix string, summary Summary, err error) {
 	runtime.mu.Lock()
 	defer runtime.mu.Unlock()
 
@@ -72,6 +74,8 @@ func (runtime *Runtime) markFinished(startedAt time.Time, runID string, summary 
 	runtime.status.Running = false
 	runtime.status.LastFinishedAt = time.Now()
 	runtime.status.LastRunID = runID
+	runtime.status.LastBucket = strings.TrimSpace(bucket)
+	runtime.status.LastPrefix = strings.TrimSpace(prefix)
 	runtime.status.LastTrigger = trigger
 	runtime.status.LastSummary = summary
 	runtime.status.Progress = nil
@@ -81,7 +85,7 @@ func (runtime *Runtime) markFinished(startedAt time.Time, runID string, summary 
 	} else {
 		runtime.status.LastDuration = time.Since(startedAt)
 	}
-	runtime.recordRun(startedAt, runID, summary, err, trigger, errorKind)
+	runtime.recordRun(startedAt, runID, strings.TrimSpace(bucket), strings.TrimSpace(prefix), summary, err, trigger, errorKind)
 	if err != nil {
 		runtime.status.LastError = err.Error()
 		return

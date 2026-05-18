@@ -53,7 +53,8 @@ func (s *Service) handleRepairRun(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "repair runtime unavailable"})
 		return
 	}
-	summary, err := s.repair.RunOnce(r.Context())
+	bucket, prefix := parseRepairRunScope(r)
+	summary, err := s.repair.RunOnceWithScope(r.Context(), bucket, prefix)
 	if errors.Is(err, repair.ErrRepairAlreadyRunning) {
 		s.writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
@@ -136,6 +137,10 @@ func (s *Service) handleRepairIssues(w http.ResponseWriter, r *http.Request) {
 		Limit:  limit,
 		Issues: issues,
 	})
+}
+
+func parseRepairRunScope(r *http.Request) (string, string) {
+	return strings.TrimSpace(r.URL.Query().Get("bucket")), strings.TrimSpace(r.URL.Query().Get("prefix"))
 }
 
 func parseIntQueryParam(r *http.Request, name string, defaultValue, maxValue int) (int, error) {

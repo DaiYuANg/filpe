@@ -5,37 +5,61 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/lyonbrown4d/maxio/internal/config"
 	"github.com/lyonbrown4d/maxio/object"
 )
 
-func (runtime *Runtime) runOnce(ctx context.Context, runID string) (Summary, error) {
+func (runtime *Runtime) runOnce(ctx context.Context, runID, bucketFilter, prefixFilter string) (Summary, error) {
 	if runtime == nil || runtime.objects == nil {
 		return Summary{}, errors.New("repair runtime unavailable")
 	}
 	summary := Summary{RunID: runID}
-	var err error
-	var buckets []object.Bucket
-	buckets, err = runtime.objects.ListBuckets(ctx)
+	buckets, err := runtime.resolveBuckets(ctx, bucketFilter)
 	if err != nil {
 		return summary, fmt.Errorf("list buckets for repair: %w", err)
 	}
 	summary.Buckets = len(buckets)
 	limiter := newRepairLimiter(runtime.cfg.RepairRateLimit)
+	return runtime.scanBuckets(ctx, buckets, runID, strings.TrimSpace(prefixFilter), &summary, limiter)
+}
+
+func (runtime *Runtime) resolveBuckets(ctx context.Context, bucketFilter string) ([]object.Bucket, error) {
+	if bucketFilter == "" {
+		buckets, err := runtime.objects.ListBuckets(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list buckets for repair: %w", err)
+		}
+		return buckets, nil
+	}
+	return []object.Bucket{{Name: bucketFilter}}, nil
+}
+
+func (runtime *Runtime) scanBuckets(
+	ctx context.Context,
+	buckets []object.Bucket,
+	runID string,
+	prefixFilter string,
+	summary *Summary,
+	limiter *repairLimiter,
+) (Summary, error) {
 	sort.SliceStable(buckets, func(i, j int) bool {
 		return buckets[i].Name < buckets[j].Name
 	})
+	if summary == nil {
+		summary = &Summary{RunID: runID}
+	}
 	totalBuckets := len(buckets)
 	for idx, bucket := range buckets {
-		if err := scanBucket(ctx, runtime, bucket, idx+1, totalBuckets, runID, &summary, limiter); err != nil {
-			return summary, err
+		if err := scanBucket(ctx, runtime, bucket, idx+1, totalBuckets, runID, prefixFilter, summary, limiter); err != nil {
+			return *summary, err
 		}
 		if summary.Limited {
-			return summary, nil
+			break
 		}
 	}
-	return summary, nil
+	return *summary, nil
 }
 
 func scanBucket(
@@ -45,13 +69,14 @@ func scanBucket(
 	bucketIndex int,
 	totalBuckets int,
 	runID string,
+	prefix string,
 	summary *Summary,
 	limiter *repairLimiter,
 ) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("scan repair bucket context: %w", err)
 	}
-	objects, err := runtime.objects.ListObjects(ctx, bucket.Name, "")
+	objects, err := runtime.objects.ListObjects(ctx, bucket.Name, prefix)
 	if err != nil {
 		summary.Failed++
 		runtime.logger.WarnContext(ctx, "list objects for repair failed", "bucket", bucket.Name, "error", err)
