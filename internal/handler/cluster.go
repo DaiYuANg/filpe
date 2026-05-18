@@ -54,6 +54,18 @@ func (s *Service) handleClusterBootstrap(w http.ResponseWriter, r *http.Request)
 		s.writeError(w, err)
 		return
 	}
+	membership, err := s.raft.GetMembership(r.Context())
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	if membershipStatesMatch(membership.Nodes, req.Nodes) {
+		s.writeJSON(w, http.StatusOK, map[string]any{
+			"status":  "already_bootstrapped",
+			"members": len(req.Nodes),
+		})
+		return
+	}
 	result, err := s.raft.SyncReplicas(r.Context(), req.Nodes)
 	if err != nil {
 		s.writeError(w, err)
@@ -65,6 +77,18 @@ func (s *Service) handleClusterBootstrap(w http.ResponseWriter, r *http.Request)
 	}
 	s.auditHTTP(r, "cluster.bootstrap", "members", len(req.Nodes))
 	s.writeJSON(w, http.StatusOK, result)
+}
+
+func membershipStatesMatch(current, desired map[uint64]string) bool {
+	if len(current) != len(desired) {
+		return false
+	}
+	for replicaID, target := range current {
+		if desired[replicaID] != target {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Service) handleClusterJoin(w http.ResponseWriter, r *http.Request) {

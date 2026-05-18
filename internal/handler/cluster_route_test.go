@@ -156,3 +156,48 @@ func TestIsClusterRouteChecks(t *testing.T) {
 		t.Fatal("expected incomplete action path not to match")
 	}
 }
+
+func TestMembershipStatesMatch(t *testing.T) {
+	t.Parallel()
+
+	current := map[uint64]string{
+		1: "127.0.0.1:63001",
+		2: "127.0.0.1:63002",
+	}
+	desired := map[uint64]string{
+		1: "127.0.0.1:63001",
+		2: "127.0.0.1:63002",
+	}
+	if !membershipStatesMatch(current, desired) {
+		t.Fatal("expected membership maps to match")
+	}
+}
+
+func TestMembershipStatesMatchRejectsDifferentTarget(t *testing.T) {
+	t.Parallel()
+
+	current := map[uint64]string{
+		1: "127.0.0.1:63001",
+	}
+	desired := map[uint64]string{
+		1: "127.0.0.1:63003",
+	}
+	if membershipStatesMatch(current, desired) {
+		t.Fatal("expected different target to not match")
+	}
+}
+
+func TestMembershipStatesMatchRejectsDifferentSize(t *testing.T) {
+	t.Parallel()
+
+	current := map[uint64]string{
+		1: "127.0.0.1:63001",
+	}
+	desired := map[uint64]string{
+		1: "127.0.0.1:63001",
+		2: "127.0.0.1:63002",
+	}
+	if membershipStatesMatch(current, desired) {
+		t.Fatal("expected different size to not match")
+	}
+}
