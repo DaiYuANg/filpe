@@ -29,6 +29,11 @@ type replacementReplicaResponse struct {
 	Status       string `json:"status"`
 }
 
+var (
+	errCannotReplaceLocalReplica    = errors.New("cannot replace local raft replica")
+	errClusterReplaceMemberNotFound = errors.New("cluster replace member not found")
+)
+
 func (s *Service) handleReplaceClusterMember(w http.ResponseWriter, r *http.Request, oldReplicaID uint64) {
 	req, err := decodeReplacementReplicaRequest(r)
 	if err != nil {
@@ -37,7 +42,7 @@ func (s *Service) handleReplaceClusterMember(w http.ResponseWriter, r *http.Requ
 	}
 	result, err := s.replaceClusterMember(r.Context(), oldReplicaID, req)
 	if err != nil {
-		s.writeError(w, err)
+		s.writeClusterReplaceError(w, err)
 		return
 	}
 	s.auditHTTP(r, "cluster.member.replace",
@@ -49,6 +54,18 @@ func (s *Service) handleReplaceClusterMember(w http.ResponseWriter, r *http.Requ
 		"used_bytes", result.UsedBytes,
 	)
 	s.writeJSON(w, http.StatusAccepted, result)
+}
+
+func (s *Service) writeClusterReplaceError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errCannotReplaceLocalReplica) {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if errors.Is(err, errClusterReplaceMemberNotFound) {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	s.writeError(w, err)
 }
 
 func decodeReplacementReplicaRequest(r *http.Request) (replacementReplicaRequest, error) {
@@ -104,11 +121,8 @@ func (s *Service) prepareClusterMemberReplacement(
 	if err != nil {
 		return req, nodePlacementStats{}, fmt.Errorf("get raft membership: %w", err)
 	}
-	if membership.LocalReplicaID == oldReplicaID {
-		return req, nodePlacementStats{}, errors.New("cannot replace local raft replica")
-	}
-	if _, ok := membership.Nodes[oldReplicaID]; !ok {
-		return req, nodePlacementStats{}, fmt.Errorf("old replica %d is missing from raft membership", oldReplicaID)
+	if validationErr := ValidateClusterMemberReplacement(oldReplicaID, membership); validationErr != nil {
+		return req, nodePlacementStats{}, validationErr
 	}
 	replacementReplicaID, err := resolveReplacementReplicaID(oldReplicaID, req.ReplicaID, membership)
 	if err != nil {
@@ -122,6 +136,20 @@ func (s *Service) prepareClusterMemberReplacement(
 		return req, nodePlacementStats{}, err
 	}
 	return req, stats, nil
+}
+
+// ValidateClusterMemberReplacement validates whether a non-local existing replica can be replaced.
+func ValidateClusterMemberReplacement(oldReplicaID uint64, membership raftx.Membership) error {
+	if oldReplicaID == 0 {
+		return errors.New("old replica_id must be greater than zero")
+	}
+	if membership.LocalReplicaID == oldReplicaID {
+		return errCannotReplaceLocalReplica
+	}
+	if _, ok := membership.Nodes[oldReplicaID]; !ok {
+		return fmt.Errorf("%w: old replica %d", errClusterReplaceMemberNotFound, oldReplicaID)
+	}
+	return nil
 }
 
 func resolveReplacementReplicaID(oldReplicaID, requestedReplicaID uint64, membership raftx.Membership) (uint64, error) {

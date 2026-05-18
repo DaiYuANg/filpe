@@ -31,7 +31,8 @@ treated as a production-grade object storage service.
 - Cluster node registry, metrics, and rebalance/decommission APIs now expose
   current object, shard, and used byte ownership derived from committed shard
   layouts. Rebalance plan/action now validates Raft membership before scanning
-  or moving object layouts, and replacement reports the old node's logical bytes.
+  or moving object layouts, replacement reports the old node's logical bytes, and
+  replacement validation maps local/missing replicas to explicit client errors.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
   production target.
 
