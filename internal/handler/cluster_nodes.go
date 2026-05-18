@@ -20,6 +20,10 @@ const (
 	ClusterNodeDraining    = "draining"
 	ClusterNodeDiscovered  = "discovered"
 	ClusterNodeStorageOnly = "storage_only"
+
+	ClusterStorageStateActive       = "active"
+	ClusterStorageStateDrained      = "drained"
+	ClusterStorageStateUnregistered = "unregistered"
 )
 
 type ClusterNodeInfo struct {
@@ -30,6 +34,7 @@ type ClusterNodeInfo struct {
 	Member            bool     `json:"member"`
 	Discovered        bool     `json:"discovered"`
 	StorageRegistered bool     `json:"storage_registered"`
+	StorageState      string   `json:"storage_state"`
 	Drained           bool     `json:"drained,omitempty"`
 	RaftTarget        string   `json:"raft_target,omitempty"`
 	RaftAddress       string   `json:"raft_address,omitempty"`
@@ -71,6 +76,7 @@ func BuildClusterNodeRegistry(
 	result := make([]ClusterNodeInfo, 0, len(nodes))
 	for key := range nodes {
 		node := nodes[key]
+		node.StorageState = clusterStorageState(node)
 		node.Status = clusterNodeStatus(node)
 		node.Issues = clusterNodeIssues(node)
 		result = append(result, node)
@@ -135,7 +141,7 @@ func mergeStorageNodes(nodes map[string]ClusterNodeInfo, storageNodes []engine.S
 }
 
 func clusterNodeStatus(node ClusterNodeInfo) string {
-	if node.Drained {
+	if node.StorageState == ClusterStorageStateDrained {
 		return ClusterNodeDraining
 	}
 	switch strings.ToLower(strings.TrimSpace(node.DiscoveryState)) {
@@ -148,6 +154,16 @@ func clusterNodeStatus(node ClusterNodeInfo) string {
 	default:
 		return clusterUnknownDiscoveryStatus(node)
 	}
+}
+
+func clusterStorageState(node ClusterNodeInfo) string {
+	if !node.StorageRegistered {
+		return ClusterStorageStateUnregistered
+	}
+	if node.Drained {
+		return ClusterStorageStateDrained
+	}
+	return ClusterStorageStateActive
 }
 
 func clusterAliveStatus(node ClusterNodeInfo) string {
@@ -176,9 +192,15 @@ func clusterNodeIssues(node ClusterNodeInfo) []string {
 	issues = appendIssueIf(issues, node.Member && !node.StorageRegistered, "storage_not_registered")
 	issues = appendIssueIf(issues, node.Discovered && !node.Member, "not_in_raft_membership")
 	issues = appendIssueIf(issues, node.StorageRegistered && !node.Member, "storage_without_raft_member")
+	issues = appendIssueIf(issues, drainedStorageHasOwnership(node), "drained_storage_has_ownership")
 	issues = appendIssueIf(issues, addressMismatch(node.RaftTarget, node.RaftAddress), "raft_address_mismatch")
 	issues = appendIssueIf(issues, addressMismatch(node.StorageAddress, node.HTTPAddress), "storage_address_mismatch")
 	return issues
+}
+
+func drainedStorageHasOwnership(node ClusterNodeInfo) bool {
+	return node.StorageState == ClusterStorageStateDrained &&
+		(node.ObjectCount > 0 || node.ShardCount > 0 || node.UsedBytes > 0)
 }
 
 func appendIssueIf(issues []string, condition bool, issue string) []string {

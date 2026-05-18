@@ -34,6 +34,9 @@ func TestBuildClusterNodeRegistryMergesMemberDiscoveryAndStorage(t *testing.T) {
 	assertClusterNode(t, nodes[0], 1, handler.ClusterNodeOnline)
 	assertClusterNode(t, nodes[1], 2, handler.ClusterNodeSuspect)
 	assertClusterNode(t, nodes[2], 3, handler.ClusterNodeDiscovered)
+	assertClusterStorageState(t, nodes[0], handler.ClusterStorageStateActive)
+	assertClusterStorageState(t, nodes[1], handler.ClusterStorageStateActive)
+	assertClusterStorageState(t, nodes[2], handler.ClusterStorageStateUnregistered)
 	if nodes[1].ObjectCount != 1 || nodes[1].ShardCount != 4 {
 		t.Fatalf("node 2 ownership = %d/%d, want 1/4", nodes[1].ObjectCount, nodes[1].ShardCount)
 	}
@@ -61,6 +64,7 @@ func TestBuildClusterNodeRegistryReportsOfflineMissingStorage(t *testing.T) {
 	})
 
 	assertClusterNode(t, nodes[1], 2, handler.ClusterNodeOffline)
+	assertClusterStorageState(t, nodes[1], handler.ClusterStorageStateUnregistered)
 	if !slices.Contains(nodes[1].Issues, "not_discovered") {
 		t.Fatalf("node 2 issues = %+v, want not_discovered", nodes[1].Issues)
 	}
@@ -80,10 +84,14 @@ func TestBuildClusterNodeRegistryReportsDrainingStorageNode(t *testing.T) {
 	}, []discovery.Node{
 		{ReplicaID: 1, State: "alive", RaftAddress: "127.0.0.1:63000"},
 	}, []engine.StorageNodeInfo{
-		{ID: "raft-1", Address: "127.0.0.1:8080", Local: true, Drained: true},
+		{ID: "raft-1", Address: "127.0.0.1:8080", Local: true, Drained: true, ObjectCount: 1, ShardCount: 3, UsedBytes: 64},
 	})
 
 	assertClusterNode(t, nodes[0], 1, handler.ClusterNodeDraining)
+	assertClusterStorageState(t, nodes[0], handler.ClusterStorageStateDrained)
+	if !slices.Contains(nodes[0].Issues, "drained_storage_has_ownership") {
+		t.Fatalf("node issues = %+v, want drained_storage_has_ownership", nodes[0].Issues)
+	}
 }
 
 func assertClusterNode(t *testing.T, node handler.ClusterNodeInfo, replicaID uint64, status string) {
@@ -93,5 +101,12 @@ func assertClusterNode(t *testing.T, node handler.ClusterNodeInfo, replicaID uin
 	}
 	if node.Status != status {
 		t.Fatalf("status = %q, want %q: %+v", node.Status, status, node)
+	}
+}
+
+func assertClusterStorageState(t *testing.T, node handler.ClusterNodeInfo, state string) {
+	t.Helper()
+	if node.StorageState != state {
+		t.Fatalf("storage_state = %q, want %q: %+v", node.StorageState, state, node)
 	}
 }
