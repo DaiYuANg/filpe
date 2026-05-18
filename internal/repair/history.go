@@ -61,21 +61,33 @@ func (runtime *Runtime) Issues(runID string, offset, limit int) ([]Issue, int, b
 	return items, total, true
 }
 
-func (runtime *Runtime) recordRun(startedAt time.Time, runID string, summary Summary, err error) {
+func (runtime *Runtime) recordRun(
+	startedAt time.Time,
+	runID string,
+	summary Summary,
+	err error,
+	trigger string,
+	errorKind string,
+) {
 	if runtime == nil {
 		return
 	}
 	if runID == "" {
 		runID = runtime.newRunID()
 	}
+	if errorKind == "" {
+		errorKind = classifyRepairError(err)
+	}
 	if runtime.issues == nil {
 		runtime.issues = make(map[string][]Issue)
 	}
 	record := RunRecord{
 		RunID:      runID,
+		Trigger:    trigger,
 		StartedAt:  startedAt,
 		FinishedAt: time.Now(),
 		Duration:   runtime.status.LastDuration.Milliseconds(),
+		ErrorKind:  errorKind,
 		Summary:    summary.withoutIssues(),
 		IssueCount: len(summary.Issues),
 	}

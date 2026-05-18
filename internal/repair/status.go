@@ -1,15 +1,20 @@
 package repair
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Status reports the most recent repair scan lifecycle state.
 type Status struct {
 	Running        bool               `json:"running"`
 	LastRunID      string             `json:"last_run_id,omitempty"`
+	LastTrigger    string             `json:"last_trigger,omitempty"`
 	LastStartedAt  time.Time          `json:"last_started_at,omitzero"`
 	LastFinishedAt time.Time          `json:"last_finished_at,omitzero"`
 	LastDuration   time.Duration      `json:"last_duration,omitzero"`
 	LastError      string             `json:"last_error,omitempty"`
+	LastErrorKind  string             `json:"last_error_kind,omitempty"`
 	LastSummary    Summary            `json:"last_summary"`
 	Progress       *RepairRunProgress `json:"progress,omitempty"`
 }
@@ -58,17 +63,25 @@ func (runtime *Runtime) markFinished(startedAt time.Time, runID string, summary 
 	runtime.mu.Lock()
 	defer runtime.mu.Unlock()
 
+	errorKind := classifyRepairError(err)
+	trigger := runtime.lastTrigger
+	if strings.TrimSpace(trigger) == "" {
+		trigger = repairRunTriggerManual
+	}
+
 	runtime.status.Running = false
 	runtime.status.LastFinishedAt = time.Now()
 	runtime.status.LastRunID = runID
+	runtime.status.LastTrigger = trigger
 	runtime.status.LastSummary = summary
 	runtime.status.Progress = nil
+	runtime.status.LastErrorKind = errorKind
 	if startedAt.IsZero() {
 		runtime.status.LastDuration = 0
 	} else {
 		runtime.status.LastDuration = time.Since(startedAt)
 	}
-	runtime.recordRun(startedAt, runID, summary, err)
+	runtime.recordRun(startedAt, runID, summary, err, trigger, errorKind)
 	if err != nil {
 		runtime.status.LastError = err.Error()
 		return

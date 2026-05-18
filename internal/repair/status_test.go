@@ -1,6 +1,11 @@
 package repair
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+
+	"github.com/lyonbrown4d/maxio/object"
+)
 
 func TestRuntimeSetProgress(t *testing.T) {
 	t.Parallel()
@@ -62,5 +67,49 @@ func TestRuntimeMarkFinishedStoresRunIDInLastSummary(t *testing.T) {
 	}
 	if status.LastSummary.Buckets != 2 {
 		t.Fatalf("expected status last summary buckets = 2, got %d", status.LastSummary.Buckets)
+	}
+}
+
+func TestRuntimeMarkFinishedStoresErrorKindAndTrigger(t *testing.T) {
+	t.Parallel()
+
+	runtime := &Runtime{}
+	runtime.setRunTrigger(repairRunTriggerManual)
+	startedAt, _ := runtime.tryMarkStarted("run-1")
+	markErr := fmt.Errorf("mark failed: %w", object.ErrNotFound)
+	runtime.markFinished(startedAt, "run-1", Summary{}, markErr)
+
+	status := runtime.Status()
+	if status.LastErrorKind != repairErrorKindNotFound {
+		t.Fatalf("expected last error kind %q, got %q", repairErrorKindNotFound, status.LastErrorKind)
+	}
+	if status.LastTrigger != repairRunTriggerManual {
+		t.Fatalf("expected last trigger %q, got %q", repairRunTriggerManual, status.LastTrigger)
+	}
+	if status.LastError != markErr.Error() {
+		t.Fatalf("expected last error %q, got %q", markErr, status.LastError)
+	}
+}
+
+func TestRuntimeHistoryRecordsErrorKindAndTrigger(t *testing.T) {
+	t.Parallel()
+
+	runtime := &Runtime{}
+	runtime.setRunTrigger(repairRunTriggerScheduled)
+	startedAt, _ := runtime.tryMarkStarted("run-1")
+	runtime.markFinished(startedAt, "run-1", Summary{}, nil)
+
+	history, total := runtime.History(0, 10)
+	if total != 1 {
+		t.Fatalf("expected total history 1, got %d", total)
+	}
+	if len(history) != 1 {
+		t.Fatalf("expected one history item, got %d", len(history))
+	}
+	if history[0].Trigger != repairRunTriggerScheduled {
+		t.Fatalf("expected history trigger %q, got %q", repairRunTriggerScheduled, history[0].Trigger)
+	}
+	if history[0].ErrorKind != "" {
+		t.Fatalf("expected no error kind for success, got %q", history[0].ErrorKind)
 	}
 }

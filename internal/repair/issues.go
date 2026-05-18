@@ -1,6 +1,10 @@
 package repair
 
 import (
+	"context"
+	"errors"
+	"strings"
+
 	"time"
 
 	"github.com/lyonbrown4d/maxio/object"
@@ -14,10 +18,12 @@ const (
 // RunRecord reports one completed repair run.
 type RunRecord struct {
 	RunID      string    `json:"run_id"`
+	Trigger    string    `json:"trigger"`
 	StartedAt  time.Time `json:"started_at,omitzero"`
 	FinishedAt time.Time `json:"finished_at,omitzero"`
 	Duration   int64     `json:"duration_ms"`
 	Error      string    `json:"error,omitempty"`
+	ErrorKind  string    `json:"error_kind,omitempty"`
 	Summary    Summary   `json:"summary"`
 	IssueCount int       `json:"issue_count"`
 }
@@ -42,6 +48,47 @@ type Issue struct {
 	Available   int    `json:"available,omitempty"`
 	TotalChunks int    `json:"total_chunks,omitempty"`
 	Recoverable bool   `json:"recoverable"`
+}
+
+const (
+	repairErrorKindContextCanceled = "context_canceled"
+	repairErrorKindContextTimeout  = "context_timeout"
+	repairErrorKindNotFound        = "object_not_found"
+	repairErrorKindObjectCorrupted = "object_corrupted"
+	repairErrorKindEngineFailed    = "engine_failed"
+	repairErrorKindBadRequest      = "bad_request"
+	repairErrorKindRuntime         = "runtime_error"
+)
+
+func classifyRepairError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	if errors.Is(err, context.Canceled) {
+		return repairErrorKindContextCanceled
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return repairErrorKindContextTimeout
+	}
+	if errors.Is(err, object.ErrNotFound) {
+		return repairErrorKindNotFound
+	}
+	if errors.Is(err, object.ErrObjectCorrupted) {
+		return repairErrorKindObjectCorrupted
+	}
+	if errors.Is(err, object.ErrEngineFailed) {
+		return repairErrorKindEngineFailed
+	}
+	if errors.Is(err, object.ErrBadRequest) {
+		return repairErrorKindBadRequest
+	}
+
+	message := strings.ToLower(err.Error())
+	if strings.Contains(message, "checksum") || strings.Contains(message, "corrupt") {
+		return repairErrorKindObjectCorrupted
+	}
+	return repairErrorKindRuntime
 }
 
 func addIssue(summary *Summary, issue Issue) {

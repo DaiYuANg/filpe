@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -17,6 +18,8 @@ import (
 )
 
 const repairJobName = "maxio.object.repair"
+const repairRunTriggerScheduled = "scheduled"
+const repairRunTriggerManual = "manual"
 
 // Summary reports one repair scan result.
 type Summary struct {
@@ -46,15 +49,16 @@ var ErrRepairAlreadyRunning = errors.New("repair run already in progress")
 
 // Runtime owns the scheduled repair job.
 type Runtime struct {
-	cfg       config.Config
-	objects   *object.Service
-	scheduler *scheduler.Runtime
-	logger    *slog.Logger
-	mu        sync.RWMutex
-	status    Status
-	history   []RunRecord
-	issues    map[string][]Issue
-	nextRunID atomic.Uint64
+	cfg         config.Config
+	objects     *object.Service
+	scheduler   *scheduler.Runtime
+	logger      *slog.Logger
+	mu          sync.RWMutex
+	status      Status
+	history     []RunRecord
+	issues      map[string][]Issue
+	lastTrigger string
+	nextRunID   atomic.Uint64
 }
 
 func Module() dix.Module {
@@ -127,11 +131,13 @@ func (runtime *Runtime) startInitialRepair(ctx context.Context) {
 			runtime.logger.DebugContext(runCtx, "skip initial repair on non-leader", "error", err)
 			return
 		}
+		runtime.setRunTrigger(repairRunTriggerScheduled)
 		runtime.runScheduled(runCtx)
 	}()
 }
 
 func (runtime *Runtime) runScheduled(ctx context.Context) {
+	runtime.setRunTrigger(repairRunTriggerScheduled)
 	summary, err := runtime.RunOnce(ctx)
 	if err != nil {
 		runtime.logger.ErrorContext(ctx, "object repair job failed", "error", err)
@@ -145,10 +151,20 @@ func (runtime *Runtime) runScheduled(ctx context.Context) {
 	runtime.logger.DebugContext(ctx, "object repair job completed", attrs...)
 }
 
+func (runtime *Runtime) setRunTrigger(trigger string) {
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	runtime.lastTrigger = strings.TrimSpace(trigger)
+	if runtime.lastTrigger == "" {
+		runtime.lastTrigger = repairRunTriggerManual
+	}
+}
+
 func (runtime *Runtime) RunOnce(ctx context.Context) (Summary, error) {
 	if runtime == nil {
 		return Summary{}, errors.New("repair runtime unavailable")
 	}
+	runtime.setRunTrigger(repairRunTriggerManual)
 	runID := runtime.newRunID()
 	startedAt, started := runtime.tryMarkStarted(runID)
 	if !started {
