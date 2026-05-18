@@ -69,6 +69,21 @@ func TestApplyStartupModeRebuildsBootstrapWhenInitialMembersProvided(t *testing.
 	}
 }
 
+func TestApplyStartupModeRejectsInitialMembersMissingLocalReplica(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.Default()
+	cfg.RaftDataDir = t.TempDir()
+	cfg.RaftBootstrap = false
+	cfg.RaftJoin = false
+	cfg.RaftInitialMembers = "2=127.0.0.1:63001,3=127.0.0.1:63002"
+
+	_, err := raft.EffectiveRaftJoinMode(cfg)
+	if err == nil {
+		t.Fatalf("expected missing local replica error for initial members")
+	}
+}
+
 func TestApplyStartupModeRequiresModeForFreshRaftDir(t *testing.T) {
 	t.Parallel()
 
@@ -95,6 +110,23 @@ func TestApplyStartupModePrefersJoinFlag(t *testing.T) {
 	}
 	if !join {
 		t.Fatalf("expected explicit join mode to be preserved")
+	}
+}
+
+func TestApplyStartupModeKeepsJoinOverBootstrap(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.Default()
+	cfg.RaftDataDir = t.TempDir()
+	cfg.RaftBootstrap = true
+	cfg.RaftJoin = true
+
+	join, err := raft.EffectiveRaftJoinMode(cfg)
+	if err != nil {
+		t.Fatalf("newRuntimeConfig: %v", err)
+	}
+	if !join {
+		t.Fatalf("expected explicit join to win over bootstrap")
 	}
 }
 
