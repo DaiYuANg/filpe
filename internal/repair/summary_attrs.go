@@ -2,6 +2,7 @@ package repair
 
 func summaryAttrs(summary Summary) []any {
 	return []any{
+		"run_id", summary.RunID,
 		"buckets", summary.Buckets,
 		"objects", summary.Objects,
 		"unhealthy", summary.Unhealthy,

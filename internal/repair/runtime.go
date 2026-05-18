@@ -10,21 +10,23 @@ import (
 	"github.com/lyonbrown4d/maxio/object"
 )
 
-func (runtime *Runtime) runOnce(ctx context.Context) (Summary, error) {
+func (runtime *Runtime) runOnce(ctx context.Context, runID string) (Summary, error) {
 	if runtime == nil || runtime.objects == nil {
 		return Summary{}, errors.New("repair runtime unavailable")
 	}
-	buckets, err := runtime.objects.ListBuckets(ctx)
+	summary := Summary{RunID: runID}
+	var err error
+	var buckets []object.Bucket
+	buckets, err = runtime.objects.ListBuckets(ctx)
 	if err != nil {
-		return Summary{}, fmt.Errorf("list buckets for repair: %w", err)
+		return summary, fmt.Errorf("list buckets for repair: %w", err)
 	}
-	summary := Summary{Buckets: len(buckets)}
+	summary.Buckets = len(buckets)
 	limiter := newRepairLimiter(runtime.cfg.RepairRateLimit)
 	sort.SliceStable(buckets, func(i, j int) bool {
 		return buckets[i].Name < buckets[j].Name
 	})
 	totalBuckets := len(buckets)
-	runID := runtime.status.LastRunID
 	for idx, bucket := range buckets {
 		if err := scanBucket(ctx, runtime, bucket, idx+1, totalBuckets, runID, &summary, limiter); err != nil {
 			return summary, err

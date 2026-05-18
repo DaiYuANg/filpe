@@ -20,6 +20,7 @@ const repairJobName = "maxio.object.repair"
 
 // Summary reports one repair scan result.
 type Summary struct {
+	RunID           string  `json:"run_id"`
 	Buckets         int     `json:"buckets"`
 	Objects         int     `json:"objects"`
 	Unhealthy       int     `json:"unhealthy"`
@@ -154,7 +155,7 @@ func (runtime *Runtime) RunOnce(ctx context.Context) (Summary, error) {
 		return Summary{}, ErrRepairAlreadyRunning
 	}
 
-	summary, err := runtime.runOnce(ctx)
+	summary, err := runtime.runOnce(ctx, runID)
 	runtime.markFinished(startedAt, runID, summary, err)
 
 	return summary, err

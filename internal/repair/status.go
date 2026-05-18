@@ -62,6 +62,7 @@ func (runtime *Runtime) markFinished(startedAt time.Time, runID string, summary 
 	runtime.status.LastFinishedAt = time.Now()
 	runtime.status.LastRunID = runID
 	runtime.status.LastSummary = summary
+	runtime.status.Progress = nil
 	if startedAt.IsZero() {
 		runtime.status.LastDuration = 0
 	} else {
@@ -73,7 +74,6 @@ func (runtime *Runtime) markFinished(startedAt time.Time, runID string, summary 
 		return
 	}
 	runtime.status.LastError = ""
-	runtime.status.Progress = nil
 }
 
 func (runtime *Runtime) setProgress(progress RepairRunProgress) {

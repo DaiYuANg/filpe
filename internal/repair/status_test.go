@@ -47,3 +47,20 @@ func TestRuntimeSetProgressRequiresRunningRun(t *testing.T) {
 		t.Fatalf("progress should not be set when runtime not running")
 	}
 }
+
+func TestRuntimeMarkFinishedStoresRunIDInLastSummary(t *testing.T) {
+	t.Parallel()
+
+	runtime := &Runtime{}
+
+	startedAt, _ := runtime.tryMarkStarted("run-1")
+	runtime.markFinished(startedAt, "run-1", Summary{RunID: "run-1", Buckets: 2}, nil)
+	status := runtime.Status()
+
+	if status.LastSummary.RunID != "run-1" {
+		t.Fatalf("expected status last summary runID = run-1, got %q", status.LastSummary.RunID)
+	}
+	if status.LastSummary.Buckets != 2 {
+		t.Fatalf("expected status last summary buckets = 2, got %d", status.LastSummary.Buckets)
+	}
+}
