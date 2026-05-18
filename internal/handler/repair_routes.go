@@ -62,7 +62,13 @@ func (s *Service) handleRepairRun(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	s.auditHTTP(r, "repair.run", "buckets", summary.Buckets, "objects", summary.Objects, "repaired_shards", summary.RepairedShards, "failed", summary.Failed)
+	s.auditHTTP(r, "repair.run",
+		"run_id", summary.RunID,
+		"buckets", summary.Buckets,
+		"objects", summary.Objects,
+		"repaired_shards", summary.RepairedShards,
+		"failed", summary.Failed,
+	)
 	s.writeJSON(w, http.StatusAccepted, summary)
 }
 
