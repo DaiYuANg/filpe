@@ -109,6 +109,7 @@ func (collector *metricsCollector) addRepairStatus(s *Service) {
 	collector.gauge("maxio_repair_last_unhealthy", "Unhealthy objects found by the last repair job.", summary.Unhealthy)
 	collector.gauge("maxio_repair_last_repaired_shards", "Shards repaired by the last repair job.", summary.RepairedShards)
 	collector.gauge("maxio_repair_last_failed", "Failures recorded by the last repair job.", summary.Failed)
+	collector.gauge("maxio_repair_last_duration_ms", "Milliseconds spent in last repair job.", int(status.LastDuration.Milliseconds()))
 }
 
 func (collector *metricsCollector) gauge(name, help string, value int) {

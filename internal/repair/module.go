@@ -38,6 +38,8 @@ type Summary struct {
 	Issues          []Issue `json:"issues,omitempty"`
 }
 
+var ErrRepairAlreadyRunning = errors.New("repair run already in progress")
+
 // Runtime owns the scheduled repair job.
 type Runtime struct {
 	cfg       config.Config
@@ -160,10 +162,13 @@ func (runtime *Runtime) RunOnce(ctx context.Context) (Summary, error) {
 	if runtime == nil {
 		return Summary{}, errors.New("repair runtime unavailable")
 	}
-	runtime.markStarted()
+	startedAt, started := runtime.tryMarkStarted()
+	if !started {
+		return Summary{}, ErrRepairAlreadyRunning
+	}
 
 	summary, err := runtime.runOnce(ctx)
-	runtime.markFinished(summary, err)
+	runtime.markFinished(startedAt, summary, err)
 
 	return summary, err
 }
