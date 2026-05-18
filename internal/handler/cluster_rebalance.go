@@ -15,6 +15,7 @@ type rebalancePlanResponse struct {
 	NodeID    string `json:"node_id"`
 	Objects   int    `json:"objects"`
 	Shards    int    `json:"shards"`
+	UsedBytes int64  `json:"used_bytes"`
 }
 
 type rebalanceResponse struct {
@@ -22,6 +23,7 @@ type rebalanceResponse struct {
 	NodeID    string `json:"node_id"`
 	Objects   int    `json:"objects"`
 	Shards    int    `json:"shards"`
+	UsedBytes int64  `json:"used_bytes"`
 }
 
 func (s *Service) handleClusterRebalance(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +46,7 @@ func (s *Service) handleClusterRebalance(w http.ResponseWriter, r *http.Request)
 		"node_id", result.NodeID,
 		"objects", result.Objects,
 		"shards", result.Shards,
+		"used_bytes", result.UsedBytes,
 	)
 	s.writeJSON(w, http.StatusAccepted, result)
 }
@@ -71,6 +74,10 @@ func (s *Service) rebalanceClusterMember(ctx context.Context, replicaID uint64) 
 		return rebalanceResponse{}, errors.New("object service unavailable")
 	}
 	nodeID := clusterStorageNodeID(replicaID)
+	stats, err := s.countObjectPlacements(ctx, nodeID)
+	if err != nil {
+		return rebalanceResponse{}, err
+	}
 	result, err := s.objects.RebalanceNode(ctx, nodeID)
 	if err != nil {
 		return rebalanceResponse{}, fmt.Errorf("rebalance cluster member: %w", err)
@@ -80,6 +87,7 @@ func (s *Service) rebalanceClusterMember(ctx context.Context, replicaID uint64) 
 		NodeID:    result.NodeID,
 		Objects:   result.Objects,
 		Shards:    result.Shards,
+		UsedBytes: stats.usedBytes,
 	}, nil
 }
 
@@ -103,52 +111,82 @@ func (s *Service) planClusterRebalance(ctx context.Context, replicaID uint64) (r
 		return rebalancePlanResponse{}, errors.New("object service unavailable")
 	}
 	nodeID := clusterStorageNodeID(replicaID)
-	objects, shards, err := s.countObjectPlacements(ctx, nodeID)
+	stats, err := s.countObjectPlacements(ctx, nodeID)
 	if err != nil {
 		return rebalancePlanResponse{}, err
 	}
 	return rebalancePlanResponse{
 		ReplicaID: replicaID,
 		NodeID:    nodeID,
-		Objects:   objects,
-		Shards:    shards,
+		Objects:   stats.objects,
+		Shards:    stats.shards,
+		UsedBytes: stats.usedBytes,
 	}, nil
 }
 
-func (s *Service) countObjectPlacements(ctx context.Context, nodeID string) (int, int, error) {
+type nodePlacementStats struct {
+	objects   int
+	shards    int
+	usedBytes int64
+}
+
+func (s nodePlacementStats) hasPlacements() bool {
+	return s.objects > 0 || s.shards > 0 || s.usedBytes > 0
+}
+
+func (s *Service) countObjectPlacements(ctx context.Context, nodeID string) (nodePlacementStats, error) {
 	buckets, err := s.objects.ListBuckets(ctx)
 	if err != nil {
-		return 0, 0, fmt.Errorf("list buckets for rebalance plan: %w", err)
+		return nodePlacementStats{}, fmt.Errorf("list buckets for rebalance plan: %w", err)
 	}
-	objects := 0
-	shards := 0
+	var stats nodePlacementStats
 	for _, bucket := range buckets {
 		entries, err := s.objects.ListObjects(ctx, bucket.Name, "")
 		if err != nil {
-			return 0, 0, fmt.Errorf("list objects for rebalance plan: %w", err)
+			return nodePlacementStats{}, fmt.Errorf("list objects for rebalance plan: %w", err)
 		}
-		objectCount, shardCount := countObjectPlacements(entries, nodeID)
-		objects += objectCount
-		shards += shardCount
+		stats.add(countObjectPlacements(entries, nodeID))
 	}
-	return objects, shards, nil
+	return stats, nil
 }
 
-func countObjectPlacements(objects []model.ObjectMeta, nodeID string) (int, int) {
-	objectCount := 0
-	shardCount := 0
+func (s *nodePlacementStats) add(other nodePlacementStats) {
+	s.objects += other.objects
+	s.shards += other.shards
+	s.usedBytes += other.usedBytes
+}
+
+func countObjectPlacements(objects []model.ObjectMeta, nodeID string) nodePlacementStats {
+	var stats nodePlacementStats
 	for index := range objects {
+		object := &objects[index]
 		matched := false
-		for _, placement := range objects[index].ShardPlacements {
+		for _, placement := range object.ShardPlacements {
 			if placement.NodeID != nodeID {
 				continue
 			}
 			matched = true
-			shardCount++
+			stats.shards++
+			stats.usedBytes += objectShardSize(object, placement.Index)
 		}
 		if matched {
-			objectCount++
+			stats.objects++
 		}
 	}
-	return objectCount, shardCount
+	return stats
+}
+
+func objectShardSize(meta *model.ObjectMeta, shardIndex int) int64 {
+	if meta == nil {
+		return 0
+	}
+	if shardIndex < 0 {
+		return 0
+	}
+	for index, size := range meta.ShardSizes {
+		if index == shardIndex {
+			return size
+		}
+	}
+	return 0
 }

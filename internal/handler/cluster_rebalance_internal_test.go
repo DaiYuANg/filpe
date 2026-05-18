@@ -1,0 +1,84 @@
+package handler
+
+import (
+	"testing"
+
+	"github.com/lyonbrown4d/maxio/internal/model"
+)
+
+func TestCountObjectPlacementsIncludesUsedBytes(t *testing.T) {
+	objects := []model.ObjectMeta{
+		{
+			Key:        "object-a",
+			ShardSizes: []int64{10, 20, 30},
+			ShardPlacements: []model.ShardPlacement{
+				{Index: 0, NodeID: "node-a"},
+				{Index: 1, NodeID: "node-b"},
+				{Index: 2, NodeID: "node-a"},
+			},
+		},
+		{
+			Key:        "object-b",
+			ShardSizes: []int64{40},
+			ShardPlacements: []model.ShardPlacement{
+				{Index: 0, NodeID: "node-a"},
+			},
+		},
+	}
+
+	stats := countObjectPlacements(objects, "node-a")
+
+	if stats.objects != 2 {
+		t.Fatalf("objects = %d, want 2", stats.objects)
+	}
+	if stats.shards != 3 {
+		t.Fatalf("shards = %d, want 3", stats.shards)
+	}
+	if stats.usedBytes != 80 {
+		t.Fatalf("usedBytes = %d, want 80", stats.usedBytes)
+	}
+	if !stats.hasPlacements() {
+		t.Fatal("expected non-empty placement stats")
+	}
+}
+
+func TestCountObjectPlacementsIgnoresMissingShardSizes(t *testing.T) {
+	objects := []model.ObjectMeta{
+		{
+			Key:        "object-a",
+			ShardSizes: []int64{10},
+			ShardPlacements: []model.ShardPlacement{
+				{Index: 0, NodeID: "node-a"},
+				{Index: 2, NodeID: "node-a"},
+				{Index: -1, NodeID: "node-a"},
+			},
+		},
+	}
+
+	stats := countObjectPlacements(objects, "node-a")
+
+	if stats.objects != 1 {
+		t.Fatalf("objects = %d, want 1", stats.objects)
+	}
+	if stats.shards != 3 {
+		t.Fatalf("shards = %d, want 3", stats.shards)
+	}
+	if stats.usedBytes != 10 {
+		t.Fatalf("usedBytes = %d, want 10", stats.usedBytes)
+	}
+}
+
+func TestCountObjectPlacementsEmptyStats(t *testing.T) {
+	stats := countObjectPlacements([]model.ObjectMeta{
+		{
+			Key: "object-a",
+			ShardPlacements: []model.ShardPlacement{
+				{Index: 0, NodeID: "node-a"},
+			},
+		},
+	}, "node-b")
+
+	if stats.hasPlacements() {
+		t.Fatal("expected empty placement stats")
+	}
+}

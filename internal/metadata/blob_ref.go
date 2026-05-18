@@ -22,6 +22,7 @@ func (m *InMemoryMetadata) ListBlobRefs(_ context.Context) ([]BlobRef, error) {
 		ref.Hash = hash
 		ref.ShardPlacements = cloneBlobRefPlacements(ref.ShardPlacements)
 		ref.ShardChecksums = cloneStrings(ref.ShardChecksums)
+		ref.ShardSizes = cloneInt64s(ref.ShardSizes)
 		refs = append(refs, ref)
 	}
 	return refs, nil
@@ -34,6 +35,7 @@ func (m *InMemoryMetadata) CreateBlobRef(
 	size int64,
 	placements []model.ShardPlacement,
 	checksums []string,
+	shardSizes ...[]int64,
 ) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -45,6 +47,7 @@ func (m *InMemoryMetadata) CreateBlobRef(
 		Path:            path,
 		ShardPlacements: cloneBlobRefPlacements(placements),
 		ShardChecksums:  cloneStrings(checksums),
+		ShardSizes:      cloneFirstInt64s(shardSizes),
 		RefCount:        1,
 		Size:            size,
 	}

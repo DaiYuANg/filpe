@@ -57,6 +57,7 @@ func (s *Store) canonicalizeDedupeLayout(ctx context.Context, meta model.ObjectM
 		ShardDir:        ref.Path,
 		ShardPlacements: ref.ShardPlacements,
 		ShardChecksums:  ref.ShardChecksums,
+		ShardSizes:      ref.ShardSizes,
 	}, meta.ContentType, meta.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("canonicalize dedupe layout: %w", mapStoreError(err))
@@ -67,6 +68,7 @@ func (s *Store) canonicalizeDedupeLayout(ctx context.Context, meta model.ObjectM
 	meta.State = model.ObjectStateCommitted
 	meta.ShardPlacements = info.ShardPlacements
 	meta.ShardChecksums = info.ShardChecksums
+	meta.ShardSizes = info.ShardSizes
 	if err := s.meta.UpsertObjectMeta(ctx, meta); err != nil {
 		return fmt.Errorf("update canonical dedupe object metadata: %w", mapStoreError(err))
 	}
@@ -76,5 +78,6 @@ func (s *Store) canonicalizeDedupeLayout(ctx context.Context, meta model.ObjectM
 func dedupeLayoutMismatch(info engine.ObjectInfo, ref metadata.BlobRef) bool {
 	return info.ShardDir != ref.Path ||
 		!reflect.DeepEqual(info.ShardPlacements, ref.ShardPlacements) ||
-		!reflect.DeepEqual(info.ShardChecksums, ref.ShardChecksums)
+		!reflect.DeepEqual(info.ShardChecksums, ref.ShardChecksums) ||
+		!reflect.DeepEqual(info.ShardSizes, ref.ShardSizes)
 }

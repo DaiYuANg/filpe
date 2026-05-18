@@ -41,6 +41,7 @@ type MetadataBlobRef struct {
 	Path            string                 `json:"path"`
 	ShardPlacements []model.ShardPlacement `json:"shard_placements,omitempty"`
 	ShardChecksums  []string               `json:"shard_checksums,omitempty"`
+	ShardSizes      []int64                `json:"shard_sizes,omitempty"`
 	RefCount        int                    `json:"ref_count"`
 	Size            int64                  `json:"size"`
 }
@@ -56,6 +57,7 @@ type MetadataCommand struct {
 	Size            int64                  `json:"size,omitempty"`
 	ShardPlacements []model.ShardPlacement `json:"shard_placements,omitempty"`
 	ShardChecksums  []string               `json:"shard_checksums,omitempty"`
+	ShardSizes      []int64                `json:"shard_sizes,omitempty"`
 }
 
 type MetadataQuery struct {

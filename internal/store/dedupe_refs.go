@@ -58,7 +58,7 @@ func (s *Store) fixMissingBlobRef(
 	if result.reachedLimit(opts) {
 		return nil
 	}
-	if err := s.meta.CreateBlobRef(ctx, hash, stat.first.info.ShardDir, stat.first.info.Size, stat.first.info.ShardPlacements, stat.first.info.ShardChecksums); err != nil {
+	if err := s.meta.CreateBlobRef(ctx, hash, stat.first.info.ShardDir, stat.first.info.Size, stat.first.info.ShardPlacements, stat.first.info.ShardChecksums, stat.first.info.ShardSizes); err != nil {
 		return fmt.Errorf("create missing blob ref: %w", mapStoreError(err))
 	}
 	result.MissingBlobRefsFixed++
@@ -68,6 +68,7 @@ func (s *Store) fixMissingBlobRef(
 		Path:            stat.first.info.ShardDir,
 		ShardPlacements: stat.first.info.ShardPlacements,
 		ShardChecksums:  stat.first.info.ShardChecksums,
+		ShardSizes:      stat.first.info.ShardSizes,
 		RefCount:        1,
 		Size:            stat.first.info.Size,
 	}

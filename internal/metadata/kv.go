@@ -25,6 +25,7 @@ type BlobRef struct {
 	Path            string
 	ShardPlacements []model.ShardPlacement
 	ShardChecksums  []string
+	ShardSizes      []int64
 	RefCount        int
 	Size            int64
 }
@@ -45,7 +46,7 @@ type MetadataStore interface {
 
 	ListBlobRefs(ctx context.Context) ([]BlobRef, error)
 	GetBlobRef(ctx context.Context, hash string) (BlobRef, bool, error)
-	CreateBlobRef(ctx context.Context, hash, path string, size int64, placements []model.ShardPlacement, checksums []string) error
+	CreateBlobRef(ctx context.Context, hash, path string, size int64, placements []model.ShardPlacement, checksums []string, shardSizes ...[]int64) error
 	UpdateBlobRefPlacements(ctx context.Context, hash string, placements []model.ShardPlacement) error
 	IncreaseBlobRef(ctx context.Context, hash string) error
 	DecreaseBlobRef(ctx context.Context, hash string) (string, bool, error)

@@ -28,8 +28,9 @@ treated as a production-grade object storage service.
   layouts against canonical blob refs.
 - Cluster backend now exposes a normalized node registry that merges Raft
   membership, gossip discovery state, and storage node registration/liveness.
-- Cluster node registry and metrics now expose current object, shard, and used
-  byte ownership derived from committed shard layouts.
+- Cluster node registry, metrics, and rebalance/decommission APIs now expose
+  current object, shard, and used byte ownership derived from committed shard
+  layouts.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
   production target.
 

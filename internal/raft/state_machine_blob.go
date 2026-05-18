@@ -12,6 +12,7 @@ func (s *raftStateMachine) createBlobRef(
 	size int64,
 	shardPlacements []model.ShardPlacement,
 	shardChecksums []string,
+	shardSizes []int64,
 ) string {
 	if invalidName(hash) || strings.TrimSpace(path) == "" {
 		return MetadataErrorBadRequest
@@ -26,6 +27,7 @@ func (s *raftStateMachine) createBlobRef(
 		Path:            path,
 		ShardPlacements: cloneRaftBlobPlacements(shardPlacements),
 		ShardChecksums:  cloneRaftBlobChecksums(shardChecksums),
+		ShardSizes:      cloneRaftBlobSizes(shardSizes),
 		RefCount:        1,
 		Size:            size,
 	}
@@ -38,6 +40,7 @@ func (s *raftStateMachine) listBlobRefs() []MetadataBlobRef {
 		ref.Hash = hash
 		ref.ShardPlacements = cloneRaftBlobPlacements(ref.ShardPlacements)
 		ref.ShardChecksums = cloneRaftBlobChecksums(ref.ShardChecksums)
+		ref.ShardSizes = cloneRaftBlobSizes(ref.ShardSizes)
 		refs = append(refs, ref)
 	}
 	return refs
@@ -92,5 +95,14 @@ func cloneRaftBlobPlacements(placements []model.ShardPlacement) []model.ShardPla
 	}
 	output := make([]model.ShardPlacement, len(placements))
 	copy(output, placements)
+	return output
+}
+
+func cloneRaftBlobSizes(sizes []int64) []int64 {
+	if len(sizes) == 0 {
+		return nil
+	}
+	output := make([]int64, len(sizes))
+	copy(output, sizes)
 	return output
 }

@@ -19,6 +19,7 @@ type clusterMemberDecommissionResponse struct {
 	NodeID    string `json:"node_id"`
 	Objects   int    `json:"objects"`
 	Shards    int    `json:"shards"`
+	UsedBytes int64  `json:"used_bytes"`
 	Status    string `json:"status"`
 }
 
@@ -33,6 +34,7 @@ func (s *Service) handleDecommissionClusterMember(w http.ResponseWriter, r *http
 		"node_id", result.NodeID,
 		"objects", result.Objects,
 		"shards", result.Shards,
+		"used_bytes", result.UsedBytes,
 		"status", result.Status,
 	)
 	s.writeJSON(w, http.StatusAccepted, result)
@@ -90,6 +92,10 @@ func (s *Service) runClusterMemberDecommission(
 	if err := s.engine.DrainStorageNode(nodeID); err != nil {
 		return clusterMemberDecommissionResponse{}, fmt.Errorf("drain storage node: %w", err)
 	}
+	stats, err := s.countObjectPlacements(ctx, nodeID)
+	if err != nil {
+		return clusterMemberDecommissionResponse{}, err
+	}
 	rebalance, err := s.objects.RebalanceNode(ctx, nodeID)
 	if err != nil {
 		return clusterMemberDecommissionResponse{}, fmt.Errorf("rebalance decommissioned node: %w", err)
@@ -108,6 +114,7 @@ func (s *Service) runClusterMemberDecommission(
 		NodeID:    nodeID,
 		Objects:   rebalance.Objects,
 		Shards:    rebalance.Shards,
+		UsedBytes: stats.usedBytes,
 		Status:    "decommissioned",
 	}, nil
 }

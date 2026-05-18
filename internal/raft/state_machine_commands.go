@@ -51,7 +51,7 @@ func (s *raftStateMachine) applyObjectCommand(cmd MetadataCommand) (MetadataResu
 func (s *raftStateMachine) applyBlobCommand(cmd MetadataCommand) (MetadataResult, string, bool) {
 	switch cmd.Type {
 	case MetadataCommandCreateBlobRef:
-		return MetadataResult{}, s.createBlobRef(cmd.Hash, cmd.Path, cmd.Size, cmd.ShardPlacements, cmd.ShardChecksums), true
+		return MetadataResult{}, s.createBlobRef(cmd.Hash, cmd.Path, cmd.Size, cmd.ShardPlacements, cmd.ShardChecksums, cmd.ShardSizes), true
 	case MetadataCommandUpdateBlobRefPlacements:
 		return MetadataResult{}, s.updateBlobRefPlacements(cmd.Hash, cmd.ShardPlacements), true
 	case MetadataCommandIncreaseBlobRef:

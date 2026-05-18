@@ -37,6 +37,7 @@ type ObjectMeta struct {
 	WriteIntent        *WriteIntent      `json:"write_intent,omitempty"`
 	ShardPlacements    []ShardPlacement  `json:"shard_placements,omitempty"`
 	ShardChecksums     []string          `json:"shard_checksums,omitempty"`
+	ShardSizes         []int64           `json:"shard_sizes,omitempty"`
 }
 
 type WriteIntent struct {

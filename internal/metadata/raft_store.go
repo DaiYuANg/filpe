@@ -166,6 +166,7 @@ func (r *RaftMetadata) CreateBlobRef(
 	size int64,
 	placements []model.ShardPlacement,
 	checksums []string,
+	shardSizes ...[]int64,
 ) error {
 	_, err := r.runtime.ProposeMetadata(ctx, raftx.MetadataCommand{
 		Type:            raftx.MetadataCommandCreateBlobRef,
@@ -174,6 +175,7 @@ func (r *RaftMetadata) CreateBlobRef(
 		Size:            size,
 		ShardPlacements: placements,
 		ShardChecksums:  checksums,
+		ShardSizes:      firstShardSizes(shardSizes),
 	})
 	return mapRaftError(err)
 }
@@ -234,7 +236,15 @@ func fromRaftBlobRef(ref raftx.MetadataBlobRef) BlobRef {
 		Path:            ref.Path,
 		ShardPlacements: ref.ShardPlacements,
 		ShardChecksums:  ref.ShardChecksums,
+		ShardSizes:      ref.ShardSizes,
 		RefCount:        ref.RefCount,
 		Size:            ref.Size,
 	}
+}
+
+func firstShardSizes(input [][]int64) []int64 {
+	if len(input) == 0 {
+		return nil
+	}
+	return input[0]
 }

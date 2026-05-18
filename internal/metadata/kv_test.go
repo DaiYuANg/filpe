@@ -17,7 +17,8 @@ func TestInMemoryMetadataBlobRefStoresShardPlacements(t *testing.T) {
 		{Index: 1, NodeID: "node-b", NodeAddress: "127.0.0.1:9002", Local: true},
 	}
 	checksums := []string{"checksum-a", "checksum-b"}
-	err := meta.CreateBlobRef(context.Background(), "hash", "shard-dir", 2048, placements, checksums)
+	sizes := []int64{128, 256}
+	err := meta.CreateBlobRef(context.Background(), "hash", "shard-dir", 2048, placements, checksums, sizes)
 	if err != nil {
 		t.Fatalf("create blob ref: %v", err)
 	}
@@ -35,14 +36,21 @@ func TestInMemoryMetadataBlobRefStoresShardPlacements(t *testing.T) {
 	if !reflect.DeepEqual(ref.ShardChecksums, checksums) {
 		t.Fatalf("stored shard checksums %#v, want %#v", ref.ShardChecksums, checksums)
 	}
+	if !reflect.DeepEqual(ref.ShardSizes, sizes) {
+		t.Fatalf("stored shard sizes %#v, want %#v", ref.ShardSizes, sizes)
+	}
 
 	placements[0].NodeID = "changed"
 	checksums[0] = "changed"
+	sizes[0] = 999
 	if ref.ShardPlacements[0].NodeID != "node-a" {
 		t.Fatalf("stored shard placements mutated by caller: %q", ref.ShardPlacements[0].NodeID)
 	}
 	if ref.ShardChecksums[0] != "checksum-a" {
 		t.Fatalf("stored shard checksums mutated by caller: %q", ref.ShardChecksums[0])
+	}
+	if ref.ShardSizes[0] != 128 {
+		t.Fatalf("stored shard sizes mutated by caller: %d", ref.ShardSizes[0])
 	}
 }
 
