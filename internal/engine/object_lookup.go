@@ -274,6 +274,7 @@ func (e *Engine) objectInfoFromLayout(layout *Layout) ObjectInfo {
 			UpdatedAt:       updatedAt,
 			ShardPlacements: cloneShardPlacements(layout.ShardPlacements),
 			ShardChecksums:  cloneStrings(layout.ShardChecksums),
+			ShardSizes:      cloneInt64s(layout.ShardSizes),
 		},
 		DataChunks:   e.dataChunks,
 		ParityChunks: e.parityChunks,

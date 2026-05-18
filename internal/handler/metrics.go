@@ -53,17 +53,20 @@ func (collector *metricsCollector) addStorageNodes(s *Service) {
 	drained := 0
 	objects := 0
 	shards := 0
+	usedBytes := int64(0)
 	for _, node := range nodes {
 		if node.Drained {
 			drained++
 		}
 		objects += node.ObjectCount
 		shards += node.ShardCount
+		usedBytes += node.UsedBytes
 	}
 	collector.gauge("maxio_storage_nodes", "Configured storage nodes.", len(nodes))
 	collector.gauge("maxio_storage_nodes_drained", "Storage nodes excluded from new placements.", drained)
 	collector.gauge("maxio_storage_node_objects", "Objects assigned to storage nodes.", objects)
 	collector.gauge("maxio_storage_node_shards", "Shards assigned to storage nodes.", shards)
+	collector.gaugeInt64("maxio_storage_node_used_bytes", "Bytes assigned to storage nodes.", usedBytes)
 }
 
 func (collector *metricsCollector) addObjectCounts(ctx context.Context, s *Service) {
@@ -130,9 +133,13 @@ func (collector *metricsCollector) addRepairStatus(s *Service) {
 }
 
 func (collector *metricsCollector) gauge(name, help string, value int) {
+	collector.gaugeInt64(name, help, int64(value))
+}
+
+func (collector *metricsCollector) gaugeInt64(name, help string, value int64) {
 	collector.line("# HELP " + name + " " + help)
 	collector.line("# TYPE " + name + " gauge")
-	collector.line(name + " " + strconv.Itoa(value))
+	collector.line(name + " " + strconv.FormatInt(value, 10))
 }
 
 func (collector *metricsCollector) line(value string) {

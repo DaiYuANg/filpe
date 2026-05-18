@@ -38,6 +38,7 @@ type ClusterNodeInfo struct {
 	DiscoveryState    string   `json:"discovery_state,omitempty"`
 	ObjectCount       int      `json:"object_count"`
 	ShardCount        int      `json:"shard_count"`
+	UsedBytes         int64    `json:"used_bytes"`
 	Issues            []string `json:"issues,omitempty"`
 }
 
@@ -128,6 +129,7 @@ func mergeStorageNodes(nodes map[string]ClusterNodeInfo, storageNodes []engine.S
 		node.Drained = storageNode.Drained
 		node.ObjectCount = storageNode.ObjectCount
 		node.ShardCount = storageNode.ShardCount
+		node.UsedBytes = storageNode.UsedBytes
 		nodes[key] = node
 	}
 }

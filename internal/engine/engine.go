@@ -51,6 +51,7 @@ type ObjectMeta struct {
 	UpdatedAt       time.Time              `json:"updated_at"`
 	ShardPlacements []model.ShardPlacement `json:"shard_placements,omitempty"`
 	ShardChecksums  []string               `json:"shard_checksums,omitempty"`
+	ShardSizes      []int64                `json:"shard_sizes,omitempty"`
 }
 
 // ObjectInfo is ObjectMeta + erasure coding info.
@@ -181,6 +182,7 @@ func (e *Engine) LinkObject(
 		Hash:            blob.Hash,
 		ShardPlacements: e.resolveBlobPlacements(ctx, bucket, key, blob),
 		ShardChecksums:  cloneStrings(blob.ShardChecksums),
+		ShardSizes:      cloneInt64s(blob.ShardSizes),
 		Bucket:          bucket,
 		Key:             key,
 		Size:            blob.Size,
@@ -215,6 +217,7 @@ func (e *Engine) LinkObject(
 			UpdatedAt:       updatedAt,
 			ShardPlacements: cloneShardPlacements(layout.ShardPlacements),
 			ShardChecksums:  cloneStrings(layout.ShardChecksums),
+			ShardSizes:      cloneInt64s(layout.ShardSizes),
 		},
 		DataChunks:   e.dataChunks,
 		ParityChunks: e.parityChunks,

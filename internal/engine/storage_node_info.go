@@ -13,11 +13,13 @@ type StorageNodeInfo struct {
 	Drained     bool   `json:"drained"`
 	ObjectCount int    `json:"object_count"`
 	ShardCount  int    `json:"shard_count"`
+	UsedBytes   int64  `json:"used_bytes"`
 }
 
 type storageNodeOwnership struct {
 	objects int
 	shards  int
+	bytes   int64
 }
 
 func (e *Engine) StorageNodeInfos() []StorageNodeInfo {
@@ -41,6 +43,7 @@ func (e *Engine) StorageNodeInfos() []StorageNodeInfo {
 			Drained:     drained,
 			ObjectCount: nodeOwnership.objects,
 			ShardCount:  nodeOwnership.shards,
+			UsedBytes:   nodeOwnership.bytes,
 		})
 	}
 	return infos
@@ -57,7 +60,7 @@ func (e *Engine) storageNodeOwnershipLocked() map[string]storageNodeOwnership {
 		if !ok || layout == nil {
 			return true
 		}
-		countLayoutOwnership(ownership, localNodeID, layout.ShardPlacements)
+		countLayoutOwnership(ownership, localNodeID, layout.ShardPlacements, layout.ShardSizes)
 		return true
 	})
 	return ownership
@@ -67,6 +70,7 @@ func countLayoutOwnership(
 	ownership map[string]storageNodeOwnership,
 	localNodeID string,
 	placements []model.ShardPlacement,
+	sizes []int64,
 ) {
 	seenObjects := make(map[string]struct{})
 	for index := range placements {
@@ -76,6 +80,7 @@ func countLayoutOwnership(
 		}
 		nodeOwnership := ownership[nodeID]
 		nodeOwnership.shards++
+		nodeOwnership.bytes += shardSizeAt(sizes, placements[index].Index)
 		ownership[nodeID] = nodeOwnership
 		seenObjects[nodeID] = struct{}{}
 	}
@@ -84,4 +89,11 @@ func countLayoutOwnership(
 		nodeOwnership.objects++
 		ownership[nodeID] = nodeOwnership
 	}
+}
+
+func shardSizeAt(sizes []int64, index int) int64 {
+	if index < 0 || index >= len(sizes) {
+		return 0
+	}
+	return sizes[index]
 }

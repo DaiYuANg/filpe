@@ -155,11 +155,17 @@ func TestStorageNodeInfosReportShardOwnership(t *testing.T) {
 	if local.ShardCount == 0 {
 		t.Fatalf("local shard_count = 0, want > 0")
 	}
+	if local.UsedBytes == 0 {
+		t.Fatalf("local used_bytes = 0, want > 0")
+	}
 	nodeA := findStorageNodeInfo(t, e.StorageNodeInfos(), "node-a")
 	if nodeA.ObjectCount != 1 {
 		t.Fatalf("node-a object_count = %d, want 1", nodeA.ObjectCount)
 	}
 	if nodeA.ShardCount == 0 {
 		t.Fatalf("node-a shard_count = 0, want > 0")
+	}
+	if nodeA.UsedBytes == 0 {
+		t.Fatalf("node-a used_bytes = 0, want > 0")
 	}
 }

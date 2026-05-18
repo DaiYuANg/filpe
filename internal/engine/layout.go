@@ -18,6 +18,7 @@ type Layout struct {
 	Shards          []Shard
 	ShardPlacements []model.ShardPlacement
 	ShardChecksums  []string
+	ShardSizes      []int64
 	Bucket          string
 	Key             string
 	Size            int64
@@ -54,6 +55,15 @@ func cloneStrings(input []string) []string {
 		return nil
 	}
 	output := make([]string, len(input))
+	copy(output, input)
+	return output
+}
+
+func cloneInt64s(input []int64) []int64 {
+	if len(input) == 0 {
+		return nil
+	}
+	output := make([]int64, len(input))
 	copy(output, input)
 	return output
 }

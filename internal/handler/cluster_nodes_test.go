@@ -25,7 +25,7 @@ func TestBuildClusterNodeRegistryMergesMemberDiscoveryAndStorage(t *testing.T) {
 		{ReplicaID: 3, State: "alive", RaftAddress: "127.0.0.1:63002", HTTPAddress: "127.0.0.1:8082"},
 	}, []engine.StorageNodeInfo{
 		{ID: "raft-1", Address: "127.0.0.1:8080", Local: true},
-		{ID: "raft-2", Address: "127.0.0.1:8081", ObjectCount: 1, ShardCount: 4},
+		{ID: "raft-2", Address: "127.0.0.1:8081", ObjectCount: 1, ShardCount: 4, UsedBytes: 128},
 	})
 
 	if len(nodes) != 3 {
@@ -36,6 +36,9 @@ func TestBuildClusterNodeRegistryMergesMemberDiscoveryAndStorage(t *testing.T) {
 	assertClusterNode(t, nodes[2], 3, handler.ClusterNodeDiscovered)
 	if nodes[1].ObjectCount != 1 || nodes[1].ShardCount != 4 {
 		t.Fatalf("node 2 ownership = %d/%d, want 1/4", nodes[1].ObjectCount, nodes[1].ShardCount)
+	}
+	if nodes[1].UsedBytes != 128 {
+		t.Fatalf("node 2 used_bytes = %d, want 128", nodes[1].UsedBytes)
 	}
 	if !slices.Contains(nodes[2].Issues, "not_in_raft_membership") {
 		t.Fatalf("node 3 issues = %+v, want not_in_raft_membership", nodes[2].Issues)
