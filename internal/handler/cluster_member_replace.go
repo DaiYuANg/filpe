@@ -25,6 +25,7 @@ type replacementReplicaResponse struct {
 	Target       string `json:"target"`
 	Objects      int    `json:"objects"`
 	Shards       int    `json:"shards"`
+	UsedBytes    int64  `json:"used_bytes"`
 	Status       string `json:"status"`
 }
 
@@ -45,6 +46,7 @@ func (s *Service) handleReplaceClusterMember(w http.ResponseWriter, r *http.Requ
 		"target", req.Target,
 		"objects", result.Objects,
 		"shards", result.Shards,
+		"used_bytes", result.UsedBytes,
 	)
 	s.writeJSON(w, http.StatusAccepted, result)
 }
@@ -73,21 +75,10 @@ func (s *Service) replaceClusterMember(
 		return replacementReplicaResponse{}, errors.New("cluster replacement dependencies unavailable")
 	}
 
-	membership, err := s.raft.GetMembership(ctx)
-	if err != nil {
-		return replacementReplicaResponse{}, fmt.Errorf("get raft membership: %w", err)
-	}
-	if membership.LocalReplicaID == oldReplicaID {
-		return replacementReplicaResponse{}, errors.New("cannot replace local raft replica")
-	}
-	if _, ok := membership.Nodes[oldReplicaID]; !ok {
-		return replacementReplicaResponse{}, fmt.Errorf("old replica %d is missing from raft membership", oldReplicaID)
-	}
-	replacementReplicaID, err := resolveReplacementReplicaID(oldReplicaID, req.ReplicaID, membership)
+	req, stats, err := s.prepareClusterMemberReplacement(ctx, oldReplicaID, req)
 	if err != nil {
 		return replacementReplicaResponse{}, err
 	}
-	req.ReplicaID = replacementReplicaID
 
 	rebalance, err := s.runClusterMemberReplacement(ctx, oldReplicaID, req)
 	if err != nil {
@@ -99,8 +90,38 @@ func (s *Service) replaceClusterMember(
 		Target:       req.Target,
 		Objects:      rebalance.Objects,
 		Shards:       rebalance.Shards,
+		UsedBytes:    stats.usedBytes,
 		Status:       "replaced",
 	}, nil
+}
+
+func (s *Service) prepareClusterMemberReplacement(
+	ctx context.Context,
+	oldReplicaID uint64,
+	req replacementReplicaRequest,
+) (replacementReplicaRequest, nodePlacementStats, error) {
+	membership, err := s.raft.GetMembership(ctx)
+	if err != nil {
+		return req, nodePlacementStats{}, fmt.Errorf("get raft membership: %w", err)
+	}
+	if membership.LocalReplicaID == oldReplicaID {
+		return req, nodePlacementStats{}, errors.New("cannot replace local raft replica")
+	}
+	if _, ok := membership.Nodes[oldReplicaID]; !ok {
+		return req, nodePlacementStats{}, fmt.Errorf("old replica %d is missing from raft membership", oldReplicaID)
+	}
+	replacementReplicaID, err := resolveReplacementReplicaID(oldReplicaID, req.ReplicaID, membership)
+	if err != nil {
+		return req, nodePlacementStats{}, err
+	}
+	req.ReplicaID = replacementReplicaID
+
+	oldNodeID := clusterStorageNodeID(oldReplicaID)
+	stats, err := s.countObjectPlacements(ctx, oldNodeID)
+	if err != nil {
+		return req, nodePlacementStats{}, err
+	}
+	return req, stats, nil
 }
 
 func resolveReplacementReplicaID(oldReplicaID, requestedReplicaID uint64, membership raftx.Membership) (uint64, error) {
