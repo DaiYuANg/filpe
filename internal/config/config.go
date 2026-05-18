@@ -17,6 +17,7 @@ const defaultConfigPath = "./config.json"
 
 type Config struct {
 	HTTPAddress            string `json:"http_address"             koanf:"http_address"             validate:"required,min=1"`
+	HTTPBodyLimit          int    `json:"http_body_limit"          koanf:"http_body_limit"`
 	StorageAddress         string `json:"storage_address"          koanf:"storage_address"`
 	AdminToken             string `json:"admin_token"              koanf:"admin_token"`
 	APIToken               string `json:"api_token"                koanf:"api_token"`
@@ -56,6 +57,7 @@ type Config struct {
 func Default() Config {
 	return Config{
 		HTTPAddress:          ":8080",
+		HTTPBodyLimit:        1 << 30,
 		StorageAddress:       "127.0.0.1:8080",
 		S3Region:             "us-east-1",
 		DataDir:              "./data",
@@ -209,6 +211,9 @@ func applyZeroDefaults(cfg Config) Config {
 	}
 	if cfg.StorageAddress == "" {
 		cfg.StorageAddress = storageAddressFromHTTPAddress(cfg.HTTPAddress)
+	}
+	if cfg.HTTPBodyLimit <= 0 {
+		cfg.HTTPBodyLimit = Default().HTTPBodyLimit
 	}
 	if cfg.RaftShardID == 0 {
 		cfg.RaftShardID = 1

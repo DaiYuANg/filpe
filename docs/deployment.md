@@ -24,6 +24,7 @@ Start the server with the default config path:
 Set `admin_token` or `MAXIO_ADMIN_TOKEN` to protect management and internal shard APIs.
 Set `api_token` or `MAXIO_API_TOKEN` to protect bucket and object APIs.
 Set `s3_access_key`, `s3_secret_key`, and `s3_region` to require SigV4 header or presigned URL authentication for S3-compatible APIs.
+Set `http_body_limit` to control the maximum request body accepted by the Fiber HTTP adapter. The default is `1073741824` bytes so standard S3 multipart upload parts work out of the box.
 
 Authenticated requests can use either header:
 

@@ -28,13 +28,11 @@ type httpRuntime struct {
 	routes  endpointRegistry
 }
 
-const s3HTTPBodyLimit = 1 << 30
-
 func Module() dix.Module {
 	return dix.NewModule(
 		"http",
 		dix.WithModuleProviders(
-			dix.Provider0(newFiberApp),
+			dix.Provider1(newFiberApp),
 			dix.Provider2(newServerRuntime),
 			dix.Provider1(newEndpointRegistry),
 			dix.Provider6(newHTTPRuntime),
@@ -46,11 +44,11 @@ func Module() dix.Module {
 	)
 }
 
-func newFiberApp() *fiberapp.App {
+func newFiberApp(cfg config.Config) *fiberapp.App {
 	views := fiberhtml.NewFileSystem(web.TemplateFileSystem(), ".html")
 	return fiberapp.New(fiberapp.Config{
 		Views:     views,
-		BodyLimit: s3HTTPBodyLimit,
+		BodyLimit: cfg.HTTPBodyLimit,
 	})
 }
 
