@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -16,19 +15,6 @@ import (
 type addReplicaRequest struct {
 	ReplicaID uint64 `json:"replica_id"`
 	Target    string `json:"target"`
-}
-
-type joinReplicaRequest struct {
-	ReplicaID uint64 `json:"replica_id"`
-	Target    string `json:"target"`
-}
-
-type bootstrapClusterRequest struct {
-	Nodes map[uint64]string `json:"nodes"`
-}
-
-type syncReplicasRequest struct {
-	Nodes map[uint64]string `json:"nodes"`
 }
 
 func (s *Service) handleClusterMembers(w http.ResponseWriter, r *http.Request) {
@@ -49,9 +35,9 @@ func (s *Service) handleClusterBootstrap(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	var req bootstrapClusterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, err)
+	nodes, err := decodeClusterNodeMap(r)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	membership, err := s.raft.GetMembership(r.Context())
@@ -59,14 +45,14 @@ func (s *Service) handleClusterBootstrap(w http.ResponseWriter, r *http.Request)
 		s.writeError(w, err)
 		return
 	}
-	if membershipStatesMatch(membership.Nodes, req.Nodes) {
+	if membershipStatesMatch(membership.Nodes, nodes) {
 		s.writeJSON(w, http.StatusOK, map[string]any{
 			"status":  "already_bootstrapped",
-			"members": len(req.Nodes),
+			"members": len(nodes),
 		})
 		return
 	}
-	result, err := s.raft.SyncReplicas(r.Context(), req.Nodes)
+	result, err := s.raft.SyncReplicas(r.Context(), nodes)
 	if err != nil {
 		s.writeError(w, err)
 		return
@@ -75,7 +61,7 @@ func (s *Service) handleClusterBootstrap(w http.ResponseWriter, r *http.Request)
 		s.writeError(w, err)
 		return
 	}
-	s.auditHTTP(r, "cluster.bootstrap", "members", len(req.Nodes))
+	s.auditHTTP(r, "cluster.bootstrap", "members", len(nodes))
 	s.writeJSON(w, http.StatusOK, result)
 }
 
@@ -96,9 +82,9 @@ func (s *Service) handleClusterJoin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	var req joinReplicaRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, err)
+	req, err := decodeAddReplicaRequest(r, "join")
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -147,9 +133,9 @@ func (s *Service) handleListClusterMembers(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Service) handleAddClusterMember(w http.ResponseWriter, r *http.Request) {
-	var req addReplicaRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, err)
+	req, err := decodeAddReplicaRequest(r, "add")
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	membership, err := s.raft.GetMembership(r.Context())
@@ -188,12 +174,12 @@ func (s *Service) handleAddClusterMember(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Service) handleSyncClusterMembers(w http.ResponseWriter, r *http.Request) {
-	var req syncReplicasRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeError(w, err)
+	nodes, err := decodeClusterNodeMap(r)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	result, err := s.raft.SyncReplicas(r.Context(), req.Nodes)
+	result, err := s.raft.SyncReplicas(r.Context(), nodes)
 	if err != nil {
 		s.writeError(w, err)
 		return
@@ -202,7 +188,7 @@ func (s *Service) handleSyncClusterMembers(w http.ResponseWriter, r *http.Reques
 		s.writeError(w, err)
 		return
 	}
-	s.auditHTTP(r, "cluster.members.sync", "members", len(req.Nodes))
+	s.auditHTTP(r, "cluster.members.sync", "members", len(nodes))
 	s.writeJSON(w, http.StatusOK, result)
 }
 
