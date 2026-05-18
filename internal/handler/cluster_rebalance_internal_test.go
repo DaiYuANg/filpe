@@ -1,10 +1,40 @@
 package handler
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/lyonbrown4d/maxio/internal/model"
+	raftx "github.com/lyonbrown4d/maxio/internal/raft"
 )
+
+func TestValidateClusterMemberRebalanceAcceptsPresentReplica(t *testing.T) {
+	err := ValidateClusterMemberRebalance(2, raftx.Membership{
+		Nodes: map[uint64]string{1: "localhost:6301", 2: "localhost:6302"},
+	})
+
+	if err != nil {
+		t.Fatalf("validate rebalance replica: %v", err)
+	}
+}
+
+func TestValidateClusterMemberRebalanceRejectsZeroReplica(t *testing.T) {
+	err := ValidateClusterMemberRebalance(0, raftx.Membership{})
+
+	if err == nil {
+		t.Fatal("expected zero replica validation error")
+	}
+}
+
+func TestValidateClusterMemberRebalanceRejectsMissingReplica(t *testing.T) {
+	err := ValidateClusterMemberRebalance(3, raftx.Membership{
+		Nodes: map[uint64]string{1: "localhost:6301", 2: "localhost:6302"},
+	})
+
+	if !errors.Is(err, errClusterRebalanceMemberNotFound) {
+		t.Fatalf("expected missing member error, got %v", err)
+	}
+}
 
 func TestCountObjectPlacementsIncludesUsedBytes(t *testing.T) {
 	objects := []model.ObjectMeta{

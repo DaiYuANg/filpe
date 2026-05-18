@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/lyonbrown4d/maxio/internal/model"
+	raftx "github.com/lyonbrown4d/maxio/internal/raft"
 )
 
 type rebalancePlanResponse struct {
@@ -26,6 +27,8 @@ type rebalanceResponse struct {
 	UsedBytes int64  `json:"used_bytes"`
 }
 
+var errClusterRebalanceMemberNotFound = errors.New("cluster rebalance member not found")
+
 func (s *Service) handleClusterRebalance(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -38,7 +41,7 @@ func (s *Service) handleClusterRebalance(w http.ResponseWriter, r *http.Request)
 	}
 	result, err := s.rebalanceClusterMember(r.Context(), replicaID)
 	if err != nil {
-		s.writeError(w, err)
+		s.writeClusterRebalanceError(w, err)
 		return
 	}
 	s.auditHTTP(r, "cluster.rebalance",
@@ -63,17 +66,28 @@ func (s *Service) handleClusterRebalancePlan(w http.ResponseWriter, r *http.Requ
 	}
 	plan, err := s.planClusterRebalance(r.Context(), replicaID)
 	if err != nil {
-		s.writeError(w, err)
+		s.writeClusterRebalanceError(w, err)
 		return
 	}
 	s.writeJSON(w, http.StatusOK, plan)
 }
 
-func (s *Service) rebalanceClusterMember(ctx context.Context, replicaID uint64) (rebalanceResponse, error) {
-	if s == nil || s.objects == nil {
-		return rebalanceResponse{}, errors.New("object service unavailable")
+func (s *Service) writeClusterRebalanceError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errClusterRebalanceMemberNotFound) {
+		s.writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
 	}
-	nodeID := clusterStorageNodeID(replicaID)
+	s.writeError(w, err)
+}
+
+func (s *Service) rebalanceClusterMember(ctx context.Context, replicaID uint64) (rebalanceResponse, error) {
+	if s == nil || s.objects == nil || s.raft == nil {
+		return rebalanceResponse{}, errors.New("cluster rebalance dependencies unavailable")
+	}
+	nodeID, err := s.resolveClusterRebalanceNode(ctx, replicaID)
+	if err != nil {
+		return rebalanceResponse{}, err
+	}
 	stats, err := s.countObjectPlacements(ctx, nodeID)
 	if err != nil {
 		return rebalanceResponse{}, err
@@ -107,10 +121,13 @@ func parseRequiredReplicaID(r *http.Request) (uint64, error) {
 }
 
 func (s *Service) planClusterRebalance(ctx context.Context, replicaID uint64) (rebalancePlanResponse, error) {
-	if s == nil || s.objects == nil {
-		return rebalancePlanResponse{}, errors.New("object service unavailable")
+	if s == nil || s.objects == nil || s.raft == nil {
+		return rebalancePlanResponse{}, errors.New("cluster rebalance dependencies unavailable")
 	}
-	nodeID := clusterStorageNodeID(replicaID)
+	nodeID, err := s.resolveClusterRebalanceNode(ctx, replicaID)
+	if err != nil {
+		return rebalancePlanResponse{}, err
+	}
 	stats, err := s.countObjectPlacements(ctx, nodeID)
 	if err != nil {
 		return rebalancePlanResponse{}, err
@@ -122,6 +139,28 @@ func (s *Service) planClusterRebalance(ctx context.Context, replicaID uint64) (r
 		Shards:    stats.shards,
 		UsedBytes: stats.usedBytes,
 	}, nil
+}
+
+func (s *Service) resolveClusterRebalanceNode(ctx context.Context, replicaID uint64) (string, error) {
+	membership, err := s.raft.GetMembership(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get raft membership: %w", err)
+	}
+	if err := ValidateClusterMemberRebalance(replicaID, membership); err != nil {
+		return "", err
+	}
+	return clusterStorageNodeID(replicaID), nil
+}
+
+// ValidateClusterMemberRebalance validates whether a replica can be used as a rebalance source.
+func ValidateClusterMemberRebalance(replicaID uint64, membership raftx.Membership) error {
+	if replicaID == 0 {
+		return errors.New("replica_id must be greater than zero")
+	}
+	if _, ok := membership.Nodes[replicaID]; !ok {
+		return fmt.Errorf("%w: replica %d", errClusterRebalanceMemberNotFound, replicaID)
+	}
+	return nil
 }
 
 type nodePlacementStats struct {
