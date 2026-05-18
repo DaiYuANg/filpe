@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/lyonbrown4d/maxio/internal/engine"
@@ -131,5 +132,34 @@ func TestSyncStorageNodesFromRaftUpdatesNodeAddresses(t *testing.T) {
 	}
 	if remote.Address() != "127.0.0.1:7102" {
 		t.Fatalf("remote address = %q, want %q", remote.Address(), "127.0.0.1:7102")
+	}
+}
+
+func TestStorageNodeInfosReportShardOwnership(t *testing.T) {
+	e := newTestEngine(t)
+
+	if err := e.RegisterStorageNode(&testStorageNode{id: "node-a", address: "127.0.0.1:7001"}); err != nil {
+		t.Fatalf("register node-a: %v", err)
+	}
+	if err := e.RegisterStorageNode(&testStorageNode{id: "node-b", address: "127.0.0.1:7002"}); err != nil {
+		t.Fatalf("register node-b: %v", err)
+	}
+	if _, err := e.PutObject(context.Background(), "bucket", "key", strings.NewReader("ownership payload"), "text/plain"); err != nil {
+		t.Fatalf("PutObject: %v", err)
+	}
+
+	local := findStorageNodeInfo(t, e.StorageNodeInfos(), engine.DefaultLocalNodeID)
+	if local.ObjectCount != 1 {
+		t.Fatalf("local object_count = %d, want 1", local.ObjectCount)
+	}
+	if local.ShardCount == 0 {
+		t.Fatalf("local shard_count = 0, want > 0")
+	}
+	nodeA := findStorageNodeInfo(t, e.StorageNodeInfos(), "node-a")
+	if nodeA.ObjectCount != 1 {
+		t.Fatalf("node-a object_count = %d, want 1", nodeA.ObjectCount)
+	}
+	if nodeA.ShardCount == 0 {
+		t.Fatalf("node-a shard_count = 0, want > 0")
 	}
 }

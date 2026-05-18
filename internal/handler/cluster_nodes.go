@@ -36,6 +36,8 @@ type ClusterNodeInfo struct {
 	HTTPAddress       string   `json:"http_address,omitempty"`
 	StorageAddress    string   `json:"storage_address,omitempty"`
 	DiscoveryState    string   `json:"discovery_state,omitempty"`
+	ObjectCount       int      `json:"object_count"`
+	ShardCount        int      `json:"shard_count"`
 	Issues            []string `json:"issues,omitempty"`
 }
 
@@ -124,6 +126,8 @@ func mergeStorageNodes(nodes map[string]ClusterNodeInfo, storageNodes []engine.S
 		node.StorageAddress = strings.TrimSpace(storageNode.Address)
 		node.Local = node.Local || storageNode.Local
 		node.Drained = storageNode.Drained
+		node.ObjectCount = storageNode.ObjectCount
+		node.ShardCount = storageNode.ShardCount
 		nodes[key] = node
 	}
 }

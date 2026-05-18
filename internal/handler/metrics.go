@@ -51,13 +51,19 @@ func (collector *metricsCollector) addStorageNodes(s *Service) {
 	}
 	nodes := s.engine.StorageNodeInfos()
 	drained := 0
+	objects := 0
+	shards := 0
 	for _, node := range nodes {
 		if node.Drained {
 			drained++
 		}
+		objects += node.ObjectCount
+		shards += node.ShardCount
 	}
 	collector.gauge("maxio_storage_nodes", "Configured storage nodes.", len(nodes))
 	collector.gauge("maxio_storage_nodes_drained", "Storage nodes excluded from new placements.", drained)
+	collector.gauge("maxio_storage_node_objects", "Objects assigned to storage nodes.", objects)
+	collector.gauge("maxio_storage_node_shards", "Shards assigned to storage nodes.", shards)
 }
 
 func (collector *metricsCollector) addObjectCounts(ctx context.Context, s *Service) {
