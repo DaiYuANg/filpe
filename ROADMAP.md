@@ -41,6 +41,120 @@ treated as a production-grade object storage service.
 
 ## Production gaps
 
+## Minimum production MVP gates
+
+MaxIO should not be called production-ready until all P0 gates below are
+complete. These gates define the smallest acceptable production target: a small
+trusted cluster that can safely store non-temporary data, recover from common
+failures, expose enough operational state, and be deployed repeatably.
+
+### P0.1 Data safety gate
+
+Goal: committed object data must remain readable or explicitly report
+unrecoverable corruption after common single-node, process, and shard failures.
+
+Acceptance criteria:
+
+- Multi-node write/read tests cover remote shard placement for at least three
+  nodes.
+- Partial write and process restart tests prove pending objects are either
+  completed, rolled back, or garbage-collected.
+- Missing shard and corrupted shard tests prove repair can restore data from
+  healthy shards when enough shards remain.
+- Delete and overwrite tests prove old blob refs, object layouts, index records,
+  and events are updated only after committed metadata changes.
+- Object and shard checksum verification is enforced on read, scrub, and repair.
+
+### P0.2 Cluster lifecycle gate
+
+Goal: operators can safely bootstrap, join, drain, replace, rebalance, and
+decommission nodes without guessing cluster state.
+
+Acceptance criteria:
+
+- Bootstrap and join are idempotent across repeated startup and leader changes.
+- Drain, replace, rebalance, and decommission APIs are idempotent where possible
+  and return structured blocked states when data still exists on a node.
+- Node registry exposes membership, discovery, storage registration, storage
+  lifecycle state, shard ownership, logical bytes, and actionable issues.
+- Address changes and removed-node reappearance are handled explicitly.
+- Multi-node tests cover leader change during membership operations.
+
+### P0.3 Security gate
+
+Goal: no data or admin API can be exposed outside a fully trusted development
+network without authentication and internal API protection.
+
+Acceptance criteria:
+
+- Admin APIs require authentication.
+- Object APIs require access key authentication and bucket/object authorization.
+- Internal shard and cluster APIs require a cluster token or equivalent
+  machine-to-machine authentication.
+- TLS can be configured for external HTTP traffic.
+- Audit logs exist for admin operations and object mutations.
+
+### P0.4 S3 core compatibility gate
+
+Goal: the S3 layer supports the minimum behavior required by common SDK clients
+without pretending to be a complete S3 implementation.
+
+Acceptance criteria:
+
+- AWS Signature V4 is implemented for supported S3 routes.
+- Access key and secret key management is available.
+- `PUT`, `GET`, `HEAD`, `DELETE`, `LIST`, bucket create/delete, range reads,
+  and presigned URLs are covered by compatibility tests.
+- Multipart upload is implemented or explicitly rejected with S3-compatible
+  errors until implemented.
+- XML errors, status codes, and ETag behavior are documented and tested for the
+  supported subset.
+
+### P0.5 Observability gate
+
+Goal: operators can determine whether the service is healthy, degraded, or
+unsafe before data loss becomes invisible.
+
+Acceptance criteria:
+
+- Health and readiness endpoints distinguish process up, metadata available,
+  leader available, storage writable, and repair backlog states.
+- Metrics cover request latency, throughput, errors, Raft leader/state changes,
+  storage ownership, repair/scrub/dedupe progress, and S3 status classes.
+- Structured logs include request IDs or trace IDs for object and admin
+  operations.
+- Repair, scrub, dedupe, rebalance, and decommission expose last run, current
+  status, failures, and retry counters.
+
+### P0.6 Operational delivery gate
+
+Goal: the same build can be deployed and restored repeatably outside a developer
+workstation.
+
+Acceptance criteria:
+
+- Docker image and example config files are available.
+- Single-node and three-node deployment docs exist.
+- Data directory layout, backup, restore, and upgrade procedures are documented.
+- Configuration defaults are safe for local development, while production docs
+  call out required secrets, data paths, and network ports.
+- Smoke-test commands are documented for startup, object write/read, S3 access,
+  repair status, and cluster node status.
+
+### MVP non-goals
+
+The first production MVP does not need to be a complete S3 clone, a globally
+distributed object store, or a chunk-level dedupe system.
+
+Explicit non-goals:
+
+- Full S3 API surface beyond the documented supported subset.
+- Cross-region replication.
+- Multi-tenant billing or quota management.
+- Chunk-level dedupe.
+- Custom binary TCP protocol.
+- Advanced placement across racks, zones, or disks beyond node-level separation.
+
 ### 1. Distributed write path
 
 The biggest missing piece is the true distributed object write path. Object data
