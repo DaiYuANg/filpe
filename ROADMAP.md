@@ -43,6 +43,8 @@ treated as a production-grade object storage service.
   recovery cannot delete in-flight `BlobPrepared` data before the pending TTL.
 - Expired overwrite recovery restores the committed object layout from the
   committed blob ref before removing replacement orphan shards.
+- Expired retained overwrite recovery releases the replacement blob ref and keeps
+  the committed object readable.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
   production target.
 
