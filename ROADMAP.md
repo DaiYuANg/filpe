@@ -57,6 +57,8 @@ treated as a production-grade object storage service.
   after the new committed object remains readable.
 - Delete tests now verify shared dedupe blob refs and shard sets survive until
   the last object reference is removed.
+- Index rebuild now prunes stale search records for deleted objects, so missed
+  delete events can be reconciled from committed metadata.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
   production target.
 
