@@ -55,6 +55,8 @@ treated as a production-grade object storage service.
   loss, and tests cover too many missing shards returning `ErrShardRecoveryFailed`.
 - Overwrite tests now verify replaced blob refs and shard sets are released only
   after the new committed object remains readable.
+- Delete tests now verify shared dedupe blob refs and shard sets survive until
+  the last object reference is removed.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
   production target.
 
