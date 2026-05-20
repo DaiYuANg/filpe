@@ -32,6 +32,9 @@ func TestStoreRecoverRemovesExpiredPendingObjects(t *testing.T) {
 	if result.PendingRemoved != 1 {
 		t.Fatalf("pending removed = %d, want 1", result.PendingRemoved)
 	}
+	if result.PendingActions[store.PendingRecoveryActionDeleteStaged] != 1 {
+		t.Fatalf("pending actions = %+v, want one delete staged", result.PendingActions)
+	}
 	staged, err := meta.ListStagedObjectMetas(ctx, "", "")
 	mustNoError(t, err, "list staged objects")
 	if len(staged) != 0 {
@@ -149,6 +152,9 @@ func TestStoreRecoverRollsBackBlobRetainedPendingWrite(t *testing.T) {
 	if result.PendingRemoved != 1 {
 		t.Fatalf("pending removed = %d, want 1", result.PendingRemoved)
 	}
+	if result.PendingActions[store.PendingRecoveryActionReleaseBlob] != 1 {
+		t.Fatalf("pending actions = %+v, want one release blob", result.PendingActions)
+	}
 	if _, ok, err := meta.GetBlobRef(ctx, blob.Hash); err != nil || ok {
 		t.Fatalf("blob ref exists = %v err = %v, want removed", ok, err)
 	}
@@ -188,6 +194,9 @@ func TestStoreRecoverDoesNotDeleteFreshPendingBlobPreparedShards(t *testing.T) {
 	mustNoError(t, err, "recover store")
 	if result.PendingRemoved != 0 {
 		t.Fatalf("pending removed = %d, want 0", result.PendingRemoved)
+	}
+	if len(result.PendingActions) != 0 {
+		t.Fatalf("pending actions = %+v, want empty", result.PendingActions)
 	}
 	if result.OrphanShardCleanup.Removed != 0 {
 		t.Fatalf("orphan shards removed = %d, want 0", result.OrphanShardCleanup.Removed)

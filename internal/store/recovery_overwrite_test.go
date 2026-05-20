@@ -57,6 +57,9 @@ func TestStoreRecoverRestoresCommittedLayoutAfterExpiredOverwrite(t *testing.T) 
 	if result.PendingRemoved != 1 {
 		t.Fatalf("pending removed = %d, want 1", result.PendingRemoved)
 	}
+	if result.PendingActions[store.PendingRecoveryActionRollbackLayout] != 1 {
+		t.Fatalf("pending actions = %+v, want one rollback layout", result.PendingActions)
+	}
 	if eng.LocalShardExists(ctx, replacement.ShardDir, replacement.Hash, 0) {
 		t.Fatal("replacement shard still exists")
 	}
@@ -116,6 +119,9 @@ func TestStoreRecoverReleasesRetainedOverwriteBlobAndKeepsCommittedObject(t *tes
 	mustNoError(t, err, "recover store")
 	if result.PendingRemoved != 1 {
 		t.Fatalf("pending removed = %d, want 1", result.PendingRemoved)
+	}
+	if result.PendingActions[store.PendingRecoveryActionReleaseBlob] != 1 {
+		t.Fatalf("pending actions = %+v, want one release blob", result.PendingActions)
 	}
 	if _, exists, getErr := meta.GetBlobRef(ctx, replacement.Hash); getErr != nil || exists {
 		t.Fatalf("replacement blob ref exists = %v err = %v, want removed", exists, getErr)

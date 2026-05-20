@@ -16,6 +16,21 @@ type pendingCleanup struct {
 	logger *slog.Logger
 }
 
+type pendingCleanupResult struct {
+	removed int
+	actions map[string]int
+}
+
+func (r *pendingCleanupResult) record(action string) {
+	if action == "" {
+		return
+	}
+	if r.actions == nil {
+		r.actions = make(map[string]int)
+	}
+	r.actions[action]++
+}
+
 func (c *pendingCleanup) run(ctx context.Context) error {
 	if c.store == nil {
 		return nil
@@ -43,30 +58,37 @@ func (c *pendingCleanup) run(ctx context.Context) error {
 }
 
 func (s *Store) CleanupPendingObjects(ctx context.Context, ttl time.Duration, logger *slog.Logger) (int, error) {
+	result, err := s.cleanupPendingObjects(ctx, ttl, logger)
+	return result.removed, err
+}
+
+func (s *Store) cleanupPendingObjects(ctx context.Context, ttl time.Duration, logger *slog.Logger) (pendingCleanupResult, error) {
 	if ttl <= 0 {
-		return 0, nil
+		return pendingCleanupResult{}, nil
 	}
 	objects, err := s.meta.ListStagedObjectMetas(ctx, "", "")
 	if err != nil {
-		return 0, fmt.Errorf("list staged object metadata: %w", mapStoreError(err))
+		return pendingCleanupResult{}, fmt.Errorf("list staged object metadata: %w", mapStoreError(err))
 	}
 
 	cutoff := time.Now().UTC().Add(-ttl)
-	removed := 0
+	result := pendingCleanupResult{}
 	for index := range objects {
 		meta := objects[index]
 		if !isExpiredPendingObject(meta, cutoff) {
 			continue
 		}
+		action := pendingRecoveryAction(meta, true)
 		exists, err := s.deleteExpiredPendingObject(ctx, meta, logger)
 		if err != nil {
-			return removed, err
+			return result, err
 		}
 		if exists {
-			removed++
+			result.removed++
+			result.record(action.Action)
 		}
 	}
-	return removed, nil
+	return result, nil
 }
 
 func (s *Store) deleteExpiredPendingObject(ctx context.Context, meta model.ObjectMeta, logger *slog.Logger) (bool, error) {

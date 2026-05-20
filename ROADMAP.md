@@ -45,6 +45,8 @@ treated as a production-grade object storage service.
   committed blob ref before removing replacement orphan shards.
 - Expired retained overwrite recovery releases the replacement blob ref and keeps
   the committed object readable.
+- Recovery results now expose pending cleanup action counts for staged deletes,
+  layout rollbacks, blob releases, and committed stale cleanup.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
   production target.
 

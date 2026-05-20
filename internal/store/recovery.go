@@ -23,6 +23,7 @@ type RecoveryResult struct {
 	StartedAt          time.Time                       `json:"started_at"`
 	FinishedAt         time.Time                       `json:"finished_at"`
 	PendingRemoved     int                             `json:"pending_removed"`
+	PendingActions     map[string]int                  `json:"pending_actions,omitempty"`
 	OrphanShardCleanup engine.OrphanShardCleanupResult `json:"orphan_shard_cleanup"`
 	DryRun             bool                            `json:"dry_run"`
 }
@@ -54,8 +55,9 @@ func (s *Store) Recover(ctx context.Context, opts RecoveryOptions) (RecoveryResu
 		StartedAt: time.Now().UTC(),
 		DryRun:    opts.DryRun,
 	}
-	pending, err := s.CleanupPendingObjects(ctx, opts.PendingTTL, opts.Logger)
-	result.PendingRemoved = pending
+	pending, err := s.cleanupPendingObjects(ctx, opts.PendingTTL, opts.Logger)
+	result.PendingRemoved = pending.removed
+	result.PendingActions = pending.actions
 	if err != nil {
 		result.FinishedAt = time.Now().UTC()
 		s.setRecoveryStatus(result, err)
