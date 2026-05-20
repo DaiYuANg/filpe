@@ -51,6 +51,8 @@ treated as a production-grade object storage service.
   object remains readable after repair.
 - Repair tests now cover rebuilding a corrupted local shard through explicit
   repair, not only through read-time reconstruction.
+- Repair now returns current health in `HealthAfter` for unrecoverable shard
+  loss, and tests cover too many missing shards returning `ErrShardRecoveryFailed`.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
   production target.
 

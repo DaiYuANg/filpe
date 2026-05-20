@@ -27,6 +27,7 @@ func (e *Engine) RepairObject(ctx context.Context, bucket, key string) (RepairRe
 		return result, nil
 	}
 	if !before.Recoverable {
+		result.HealthAfter = before
 		return result, ErrShardRecoveryFailed
 	}
 

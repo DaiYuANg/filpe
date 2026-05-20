@@ -3,6 +3,7 @@ package engine_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"testing"
 
@@ -53,6 +54,40 @@ func TestRepairObjectRestoresCorruptedLocalShard(t *testing.T) {
 	assertCorruptedShardObjectReadable(ctx, t, e, content)
 }
 
+func TestRepairObjectReportsUnrecoverableMissingShards(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEngine(t)
+
+	meta, err := e.PutObject(ctx, "test-bucket", "unrecoverable-missing.txt", bytes.NewReader([]byte("too many missing shards")), "text/plain")
+	if err != nil {
+		t.Fatalf("PutObject: %v", err)
+	}
+	missingCount := engine.DefaultParityChunks + 1
+	deleteLocalShards(ctx, t, e, meta, missingCount)
+
+	result, err := e.RepairObject(ctx, "test-bucket", "unrecoverable-missing.txt")
+	if !errors.Is(err, engine.ErrShardRecoveryFailed) {
+		t.Fatalf("RepairObject error = %v, want ErrShardRecoveryFailed", err)
+	}
+	assertUnrecoverableRepairResult(t, result, missingCount)
+}
+
+func deleteLocalShards(
+	ctx context.Context,
+	t *testing.T,
+	e *engine.Engine,
+	meta engine.ObjectInfo,
+	count int,
+) {
+	t.Helper()
+	for index := range count {
+		deleteErr := e.DeleteLocalShard(ctx, meta.ShardDir, meta.Hash, index)
+		if deleteErr != nil {
+			t.Fatalf("delete local shard %d: %v", index, deleteErr)
+		}
+	}
+}
+
 func deleteMissingLocalShard(
 	ctx context.Context,
 	t *testing.T,
@@ -78,6 +113,22 @@ func corruptLocalShard(
 	corruptErr := e.WriteLocalShard(ctx, meta.ShardDir, meta.Hash, corruptedIndex, []byte("corrupted shard"))
 	if corruptErr != nil {
 		t.Fatalf("corrupt local shard: %v", corruptErr)
+	}
+}
+
+func assertUnrecoverableRepairResult(t *testing.T, result engine.RepairResult, missingCount int) {
+	t.Helper()
+	if result.HealthBefore.Missing != missingCount {
+		t.Fatalf("HealthBefore.Missing = %d, want %d", result.HealthBefore.Missing, missingCount)
+	}
+	if result.HealthAfter.Missing != missingCount {
+		t.Fatalf("HealthAfter.Missing = %d, want %d", result.HealthAfter.Missing, missingCount)
+	}
+	if result.HealthAfter.Recoverable {
+		t.Fatal("HealthAfter.Recoverable = true, want false")
+	}
+	if len(result.Repaired) != 0 {
+		t.Fatalf("Repaired = %v, want empty", result.Repaired)
 	}
 }
 
