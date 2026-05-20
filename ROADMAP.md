@@ -49,6 +49,8 @@ treated as a production-grade object storage service.
   layout rollbacks, blob releases, and committed stale cleanup.
 - Repair tests now cover rebuilding a missing local shard and verifying the
   object remains readable after repair.
+- Repair tests now cover rebuilding a corrupted local shard through explicit
+  repair, not only through read-time reconstruction.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
   production target.
 
