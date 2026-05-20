@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -154,11 +155,34 @@ func (s *Store) cleanupOrphanShardSets(ctx context.Context, dryRun bool) (engine
 		ref := refs[index]
 		live = append(live, engine.ShardSetRef{ShardDir: ref.Path, Hash: ref.Hash})
 	}
+	pending, err := s.meta.ListStagedObjectMetas(ctx, "", "")
+	if err != nil {
+		return engine.OrphanShardCleanupResult{}, fmt.Errorf("list staged object metadata: %w", mapStoreError(err))
+	}
+	live = append(live, pendingShardSetRefs(pending)...)
 	result, err := s.engine.CleanupOrphanShardSets(ctx, live, dryRun)
 	if err != nil {
 		return result, fmt.Errorf("cleanup orphan shard sets: %w", mapStoreError(err))
 	}
 	return result, nil
+}
+
+func pendingShardSetRefs(objects []model.ObjectMeta) []engine.ShardSetRef {
+	if len(objects) == 0 {
+		return nil
+	}
+	refs := make([]engine.ShardSetRef, 0, len(objects))
+	for index := range objects {
+		meta := objects[index]
+		if strings.TrimSpace(meta.Key) == "" || strings.TrimSpace(meta.Hash) == "" {
+			continue
+		}
+		refs = append(refs, engine.ShardSetRef{
+			ShardDir: engine.ShardDirForKey(meta.Key),
+			Hash:     meta.Hash,
+		})
+	}
+	return refs
 }
 
 func expiredPendingObjects(objects []model.ObjectMeta, ttl time.Duration, now time.Time) []model.ObjectMeta {

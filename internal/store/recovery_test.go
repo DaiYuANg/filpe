@@ -156,3 +156,43 @@ func TestStoreRecoverRollsBackBlobRetainedPendingWrite(t *testing.T) {
 		t.Fatal("pending blob shard still exists")
 	}
 }
+
+func TestStoreRecoverDoesNotDeleteFreshPendingBlobPreparedShards(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	meta := metadata.NewInMemoryMetadata()
+	eng, err := engine.NewEngine(t.TempDir(), engine.DefaultDataChunks, engine.DefaultParityChunks, nil)
+	mustNoError(t, err, "new engine")
+	blob, err := eng.PutBlob(ctx, "pending.txt", bytes.NewReader([]byte("fresh pending payload")))
+	mustNoError(t, err, "put pending blob")
+	storeModule, err := store.NewStore("", meta, eng)
+	mustNoError(t, err, "new store")
+	mustNoError(t, storeModule.CreateBucket(ctx, "bucket"), "create bucket")
+	mustNoError(t, meta.StageObjectMeta(ctx, model.ObjectMeta{
+		Bucket:    "bucket",
+		Key:       "pending.txt",
+		Hash:      blob.Hash,
+		UpdatedAt: time.Now().UTC(),
+		WriteIntent: &model.WriteIntent{
+			Stage:     model.WriteIntentStageBlobPrepared,
+			StartedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		},
+	}), "stage fresh blob prepared pending object")
+
+	result, err := storeModule.Recover(ctx, store.RecoveryOptions{
+		PendingTTL:          time.Hour,
+		CleanupOrphanShards: true,
+	})
+	mustNoError(t, err, "recover store")
+	if result.PendingRemoved != 0 {
+		t.Fatalf("pending removed = %d, want 0", result.PendingRemoved)
+	}
+	if result.OrphanShardCleanup.Removed != 0 {
+		t.Fatalf("orphan shards removed = %d, want 0", result.OrphanShardCleanup.Removed)
+	}
+	if !eng.LocalShardExists(ctx, blob.ShardDir, blob.Hash, 0) {
+		t.Fatal("fresh pending blob shard was removed")
+	}
+}

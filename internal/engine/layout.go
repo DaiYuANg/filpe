@@ -50,6 +50,11 @@ func makeShardDir(prefix string) string {
 	return strings.ToLower(prefix[:2])
 }
 
+// ShardDirForKey returns the deterministic shard directory used for an object key.
+func ShardDirForKey(key string) string {
+	return makeShardDir(key)
+}
+
 func cloneStrings(input []string) []string {
 	if len(input) == 0 {
 		return nil
