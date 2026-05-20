@@ -268,3 +268,25 @@ func TestHealthDetectsCorruptedShardAndReadRecovers(t *testing.T) {
 		t.Fatalf("data = %q, want %q", data, content)
 	}
 }
+
+func TestGetObjectFailsWhenTooManyShardsAreCorrupted(t *testing.T) {
+	ctx := context.Background()
+	e := newTestEngine(t)
+
+	meta, err := e.PutObject(ctx, "test-bucket", "unrecoverable-key.txt", strings.NewReader("unrecoverable shard damage"), "text/plain")
+	if err != nil {
+		t.Fatalf("PutObject: %v", err)
+	}
+
+	corruptCount := engine.DefaultParityChunks + 1
+	for index := range corruptCount {
+		if corruptErr := e.WriteLocalShard(ctx, meta.ShardDir, meta.Hash, index, []byte("corrupted-shard")); corruptErr != nil {
+			t.Fatalf("corrupt local shard %d: %v", index, corruptErr)
+		}
+	}
+
+	_, _, err = e.GetObject(ctx, "test-bucket", "unrecoverable-key.txt")
+	if !errors.Is(err, engine.ErrShardRecoveryFailed) {
+		t.Fatalf("GetObject error = %v, want ErrShardRecoveryFailed", err)
+	}
+}
