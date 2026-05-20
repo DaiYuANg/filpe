@@ -15,7 +15,31 @@ func (s *Service) ensureClusterMemberDecommissionable(ctx context.Context, repli
 		return err
 	}
 	if stats.hasPlacements() {
-		return fmt.Errorf("replica %d still owns object shards; drain and rebalance before decommission", replicaID)
+		return &clusterDecommissionBlockedError{
+			replicaID: replicaID,
+			nodeID:    nodeID,
+			stats:     stats,
+		}
 	}
 	return nil
+}
+
+type clusterDecommissionBlockedError struct {
+	replicaID uint64
+	nodeID    string
+	stats     nodePlacementStats
+}
+
+func (e *clusterDecommissionBlockedError) Error() string {
+	return fmt.Sprintf(
+		"replica %d still owns %d objects, %d shards, and %d bytes; drain and rebalance before decommission",
+		e.replicaID,
+		e.stats.objects,
+		e.stats.shards,
+		e.stats.usedBytes,
+	)
+}
+
+func (e *clusterDecommissionBlockedError) Unwrap() error {
+	return errClusterDecommissionBlocked
 }

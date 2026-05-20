@@ -23,6 +23,16 @@ type clusterMemberDecommissionResponse struct {
 	Status    string `json:"status"`
 }
 
+type clusterMemberDecommissionBlockedResponse struct {
+	Error     string `json:"error"`
+	ReplicaID uint64 `json:"replica_id"`
+	NodeID    string `json:"node_id"`
+	Objects   int    `json:"objects"`
+	Shards    int    `json:"shards"`
+	UsedBytes int64  `json:"used_bytes"`
+	Status    string `json:"status"`
+}
+
 func (s *Service) handleDecommissionClusterMember(w http.ResponseWriter, r *http.Request, replicaID uint64) {
 	result, err := s.decommissionClusterMember(r.Context(), replicaID)
 	if err != nil {
@@ -45,11 +55,27 @@ func (s *Service) writeDecommissionError(w http.ResponseWriter, err error) {
 		s.writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	if errors.Is(err, errClusterDecommissionBlocked) {
-		s.writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+	if response, ok := decommissionBlockedResponse(err); ok {
+		s.writeJSON(w, http.StatusConflict, response)
 		return
 	}
 	s.writeError(w, err)
+}
+
+func decommissionBlockedResponse(err error) (clusterMemberDecommissionBlockedResponse, bool) {
+	var blocked *clusterDecommissionBlockedError
+	if !errors.As(err, &blocked) {
+		return clusterMemberDecommissionBlockedResponse{}, false
+	}
+	return clusterMemberDecommissionBlockedResponse{
+		Error:     blocked.Error(),
+		ReplicaID: blocked.replicaID,
+		NodeID:    blocked.nodeID,
+		Objects:   blocked.stats.objects,
+		Shards:    blocked.stats.shards,
+		UsedBytes: blocked.stats.usedBytes,
+		Status:    "blocked",
+	}, true
 }
 
 func (s *Service) decommissionClusterMember(
