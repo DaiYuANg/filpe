@@ -32,6 +32,7 @@ func (s *Service) collectMetrics(ctx context.Context) string {
 	collector.addObjectCounts(ctx, s)
 	collector.addRaftMembership(ctx, s)
 	collector.addRepairStatus(s)
+	collector.addDedupeStatus(s)
 	collector.gauge("maxio_metrics_collection_errors", "Number of metric collection failures.", collector.collectionErrors)
 	return collector.String()
 }
@@ -130,6 +131,27 @@ func (collector *metricsCollector) addRepairStatus(s *Service) {
 	collector.gauge("maxio_repair_last_failed", "Failures recorded by the last repair job.", summary.Failed)
 	collector.gauge("maxio_repair_last_limited", "Whether the last repair job was limited by configured thresholds.", boolInt(summary.Limited))
 	collector.gauge("maxio_repair_last_duration_ms", "Milliseconds spent in last repair job.", int(status.LastDuration.Milliseconds()))
+}
+
+func (collector *metricsCollector) addDedupeStatus(s *Service) {
+	if s == nil || s.dedupe == nil {
+		collector.collectionErrors++
+		return
+	}
+	status := s.dedupe.Status()
+	result := status.LastResult
+	collector.gauge("maxio_dedupe_running", "Whether the dedupe job is running.", boolInt(status.Running))
+	collector.gauge("maxio_dedupe_last_objects", "Objects scanned by the last dedupe job.", result.Objects)
+	collector.gauge("maxio_dedupe_last_blob_refs", "Blob refs scanned by the last dedupe job.", result.BlobRefs)
+	collector.gauge("maxio_dedupe_last_hashes", "Unique object hashes seen by the last dedupe job.", result.Hashes)
+	collector.gauge("maxio_dedupe_last_fixes", "Fixes applied by the last dedupe job.", result.Fixes)
+	collector.gauge("maxio_dedupe_last_ref_count_drift", "Blob ref count drift found by the last dedupe job.", result.RefCountDrift)
+	collector.gauge("maxio_dedupe_last_missing_blob_refs", "Missing blob refs found by the last dedupe job.", result.MissingBlobRefs)
+	collector.gauge("maxio_dedupe_last_orphan_blob_refs", "Orphan blob refs found by the last dedupe job.", result.OrphanBlobRefs)
+	collector.gauge("maxio_dedupe_last_layouts_mismatched", "Object layouts mismatched by the last dedupe job.", result.LayoutsMismatched)
+	collector.gaugeInt64("maxio_dedupe_last_bytes_reclaimable", "Bytes reclaimable found by the last dedupe job.", result.BytesReclaimable)
+	collector.gaugeInt64("maxio_dedupe_last_bytes_reclaimed", "Bytes reclaimed by the last dedupe job.", result.BytesReclaimed)
+	collector.gauge("maxio_dedupe_last_limited", "Whether the last dedupe job was limited by configured thresholds.", boolInt(result.Limited))
 }
 
 func (collector *metricsCollector) gauge(name, help string, value int) {

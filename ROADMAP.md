@@ -59,6 +59,8 @@ treated as a production-grade object storage service.
   the last object reference is removed.
 - Index rebuild now prunes stale search records for deleted objects, so missed
   delete events can be reconciled from committed metadata.
+- Metrics now expose background dedupe scanner running state, scan counts,
+  fix counts, drift/orphan layout findings, reclaimed bytes, and limit status.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
   production target.
 
