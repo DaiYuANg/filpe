@@ -17,12 +17,13 @@ import (
 )
 
 var (
-	ErrNotFound        = store.ErrNotFound
-	ErrBucketExists    = store.ErrBucketExists
-	ErrBucketNotFound  = store.ErrBucketNotFound
-	ErrBadRequest      = store.ErrBadRequest
-	ErrEngineFailed    = store.ErrEngineFailed
-	ErrObjectCorrupted = engine.ErrObjectCorrupted
+	ErrNotFound            = store.ErrNotFound
+	ErrBucketExists        = store.ErrBucketExists
+	ErrBucketNotFound      = store.ErrBucketNotFound
+	ErrBadRequest          = store.ErrBadRequest
+	ErrEngineFailed        = store.ErrEngineFailed
+	ErrObjectCorrupted     = engine.ErrObjectCorrupted
+	ErrShardRecoveryFailed = engine.ErrShardRecoveryFailed
 )
 
 type Bucket = model.Bucket

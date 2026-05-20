@@ -36,6 +36,8 @@ treated as a production-grade object storage service.
   Node registry now exposes explicit storage lifecycle state and flags drained
   storage nodes that still own object shards. Decommission conflict responses now
   include remaining object, shard, and logical byte counts.
+- Object read errors for decoded object corruption and unrecoverable shard
+  recovery failures are surfaced as explicit `503 Service Unavailable` responses.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
   production target.
 
