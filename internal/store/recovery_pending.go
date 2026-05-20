@@ -45,11 +45,49 @@ func (s *Store) rollbackExpiredPendingWrite(
 }
 
 func (s *Store) rollbackPendingLayout(ctx context.Context, meta model.ObjectMeta, logger *slog.Logger) error {
+	restored, err := s.restoreCommittedLayout(ctx, meta)
+	if err != nil {
+		return err
+	}
+	if restored {
+		logPendingRollback(ctx, logger, meta, PendingRecoveryActionRollbackLayout)
+		return nil
+	}
 	if err := s.engine.DeleteObjectLayout(ctx, meta.Bucket, meta.Key); err != nil && !errors.Is(err, engine.ErrObjectNotFound) {
 		return fmt.Errorf("delete pending object layout: %w", mapStoreError(err))
 	}
 	logPendingRollback(ctx, logger, meta, PendingRecoveryActionRollbackLayout)
 	return nil
+}
+
+func (s *Store) restoreCommittedLayout(ctx context.Context, pending model.ObjectMeta) (bool, error) {
+	committed, exists, err := s.meta.GetObjectMeta(ctx, pending.Bucket, pending.Key)
+	if err != nil {
+		return false, fmt.Errorf("get committed object for pending layout rollback: %w", mapStoreError(err))
+	}
+	if !exists {
+		return false, nil
+	}
+	ref, exists, err := s.meta.GetBlobRef(ctx, committed.Hash)
+	if err != nil {
+		return false, fmt.Errorf("get committed blob ref for pending layout rollback: %w", mapStoreError(err))
+	}
+	if !exists {
+		return false, fmt.Errorf("committed blob ref %s missing: %w", committed.Hash, ErrNotFound)
+	}
+	_, err = s.engine.LinkObject(ctx, committed.Bucket, committed.Key, engine.BlobInfo{
+		Hash:            committed.Hash,
+		ETag:            committed.ETag,
+		Size:            ref.Size,
+		ShardDir:        ref.Path,
+		ShardPlacements: ref.ShardPlacements,
+		ShardChecksums:  ref.ShardChecksums,
+		ShardSizes:      ref.ShardSizes,
+	}, committed.ContentType, committed.UpdatedAt)
+	if err != nil {
+		return false, fmt.Errorf("restore committed object layout: %w", mapStoreError(err))
+	}
+	return true, nil
 }
 
 func (s *Store) rollbackPendingLayoutAndBlob(ctx context.Context, meta model.ObjectMeta, logger *slog.Logger) error {

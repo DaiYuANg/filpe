@@ -41,6 +41,8 @@ treated as a production-grade object storage service.
   Read-path tests now cover unrecoverable shard corruption.
 - Orphan shard cleanup treats fresh staged pending writes as live shard sets so
   recovery cannot delete in-flight `BlobPrepared` data before the pending TTL.
+- Expired overwrite recovery restores the committed object layout from the
+  committed blob ref before removing replacement orphan shards.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
   production target.
 
