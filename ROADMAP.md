@@ -69,6 +69,8 @@ treated as a production-grade object storage service.
   class counters, and request duration totals/max values.
 - Metrics now expose current in-flight HTTP requests for load and stuck-request
   visibility.
+- Metrics now expose Raft local replica ID, leader availability, local leader
+  state, config change ID, and voting/non-voting/witness/removed member counts.
 - HTTP responses now include a generated or client-supplied request ID, and
   audit logs include the same request_id for request-to-log correlation.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a

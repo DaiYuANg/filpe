@@ -31,7 +31,7 @@ func (s *Service) collectMetrics(ctx context.Context) string {
 	collector.addReadiness(ctx, s)
 	collector.addStorageNodes(s)
 	collector.addObjectCounts(ctx, s)
-	collector.addRaftMembership(ctx, s)
+	collector.addRaftStatus(ctx, s)
 	collector.addRepairStatus(s)
 	collector.addDedupeStatus(s)
 	collector.addIndexStatus(s)
@@ -94,20 +94,6 @@ func (collector *metricsCollector) addObjectCounts(ctx context.Context, s *Servi
 	}
 	collector.gauge("maxio_buckets", "Buckets known to metadata.", len(buckets))
 	collector.gauge("maxio_objects", "Committed objects known to metadata.", objects)
-}
-
-func (collector *metricsCollector) addRaftMembership(ctx context.Context, s *Service) {
-	if s == nil || s.raft == nil {
-		collector.collectionErrors++
-		return
-	}
-	membership, err := s.raft.GetMembership(ctx)
-	if err != nil {
-		collector.collectionErrors++
-		return
-	}
-	collector.gauge("maxio_raft_members", "Voting raft members.", len(membership.Nodes))
-	collector.gauge("maxio_raft_removed_members", "Removed raft members.", len(membership.Removed))
 }
 
 func (collector *metricsCollector) addRepairStatus(s *Service) {
@@ -204,6 +190,12 @@ func (collector *metricsCollector) gaugeInt64(name, help string, value int64) {
 	collector.line("# HELP " + name + " " + help)
 	collector.line("# TYPE " + name + " gauge")
 	collector.line(name + " " + formatMetricInt(value))
+}
+
+func (collector *metricsCollector) gaugeUint64(name, help string, value uint64) {
+	collector.line("# HELP " + name + " " + help)
+	collector.line("# TYPE " + name + " gauge")
+	collector.line(name + " " + strconv.FormatUint(value, 10))
 }
 
 func formatMetricInt(value int64) string {
