@@ -33,6 +33,7 @@ func (s *Service) collectMetrics(ctx context.Context) string {
 	collector.addRaftMembership(ctx, s)
 	collector.addRepairStatus(s)
 	collector.addDedupeStatus(s)
+	collector.addIndexStatus(s)
 	collector.gauge("maxio_metrics_collection_errors", "Number of metric collection failures.", collector.collectionErrors)
 	return collector.String()
 }
@@ -152,6 +153,23 @@ func (collector *metricsCollector) addDedupeStatus(s *Service) {
 	collector.gaugeInt64("maxio_dedupe_last_bytes_reclaimable", "Bytes reclaimable found by the last dedupe job.", result.BytesReclaimable)
 	collector.gaugeInt64("maxio_dedupe_last_bytes_reclaimed", "Bytes reclaimed by the last dedupe job.", result.BytesReclaimed)
 	collector.gauge("maxio_dedupe_last_limited", "Whether the last dedupe job was limited by configured thresholds.", boolInt(result.Limited))
+}
+
+func (collector *metricsCollector) addIndexStatus(s *Service) {
+	if s == nil || s.objects == nil {
+		collector.collectionErrors++
+		return
+	}
+	status := s.objects.IndexStatus()
+	collector.gauge("maxio_index_rebuilding", "Whether the content index rebuild is running.", boolInt(status.Rebuilding))
+	collector.gauge("maxio_index_queue_size", "Configured content index queue size.", status.QueueSize)
+	collector.gauge("maxio_index_queued_objects", "Objects waiting in the content index queue.", status.QueuedObjects)
+	collector.gauge("maxio_index_dropped_objects", "Object index events dropped because the queue was full.", status.DroppedObjects)
+	collector.gauge("maxio_index_retried_objects", "Object index tasks retried after failures.", status.RetriedObjects)
+	collector.gauge("maxio_index_indexed_objects", "Objects successfully indexed by the content index worker.", status.IndexedObjects)
+	collector.gauge("maxio_index_failed_objects", "Objects that failed content indexing.", status.FailedObjects)
+	collector.gauge("maxio_index_last_rebuild_objects", "Objects indexed by the last content index rebuild.", status.LastRebuildObjects)
+	collector.gauge("maxio_index_last_rebuild_failed", "Objects that failed during the last content index rebuild.", status.LastRebuildFailed)
 }
 
 func (collector *metricsCollector) gauge(name, help string, value int) {

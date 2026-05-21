@@ -9,6 +9,7 @@ import (
 	"github.com/lyonbrown4d/maxio/internal/config"
 	"github.com/lyonbrown4d/maxio/internal/dedupe"
 	"github.com/lyonbrown4d/maxio/internal/repair"
+	"github.com/lyonbrown4d/maxio/object"
 )
 
 func TestAddRepairStatusAddsSummaryMetrics(t *testing.T) {
@@ -33,6 +34,34 @@ func TestAddRepairStatusAddsSummaryMetrics(t *testing.T) {
 		"maxio_repair_last_repaired_objects 0",
 		"maxio_repair_last_unrecoverable 0",
 		"maxio_repair_last_limited 0",
+	}
+
+	for _, name := range required {
+		if !strings.Contains(output, name) {
+			t.Fatalf("expected metric %q in output, got: %s", name, output)
+		}
+	}
+}
+
+func TestAddIndexStatusAddsSummaryMetrics(t *testing.T) {
+	t.Parallel()
+
+	collector := metricsCollector{}
+	service := newService(Dependencies{objects: &object.Service{}}, slog.Default(), config.Config{}, nil)
+
+	collector.addIndexStatus(service)
+	output := collector.String()
+
+	required := []string{
+		"maxio_index_rebuilding 0",
+		"maxio_index_queue_size 0",
+		"maxio_index_queued_objects 0",
+		"maxio_index_dropped_objects 0",
+		"maxio_index_retried_objects 0",
+		"maxio_index_indexed_objects 0",
+		"maxio_index_failed_objects 0",
+		"maxio_index_last_rebuild_objects 0",
+		"maxio_index_last_rebuild_failed 0",
 	}
 
 	for _, name := range required {
