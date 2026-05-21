@@ -9,6 +9,7 @@ func (s *Service) auditHTTP(r *http.Request, action string, attrs ...any) {
 	fields := make([]any, 0, 8+len(attrs))
 	fields = append(fields,
 		"audit_action", action,
+		"request_id", requestIDFromContext(r.Context()),
 		"method", r.Method,
 		"path", r.URL.Path,
 		"remote_addr", r.RemoteAddr,

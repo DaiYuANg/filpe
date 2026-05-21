@@ -49,6 +49,21 @@ func TestAdminAuthDoesNotProtectHealth(t *testing.T) {
 	}
 }
 
+func TestRequestIDGenerated(t *testing.T) {
+	recorder := serveHandlerGet(t, config.Config{}, "/healthz", nil)
+	if recorder.Header().Get("X-Request-ID") == "" {
+		t.Fatal("expected generated request id header")
+	}
+}
+
+func TestRequestIDPreserved(t *testing.T) {
+	headers := map[string]string{"X-Request-ID": "client-request-1"}
+	recorder := serveHandlerGet(t, config.Config{}, "/healthz", headers)
+	if recorder.Header().Get("X-Request-ID") != "client-request-1" {
+		t.Fatalf("request id = %q, want client-request-1", recorder.Header().Get("X-Request-ID"))
+	}
+}
+
 func TestAPIAuthProtectsObjectRoutes(t *testing.T) {
 	recorder := serveHandlerGet(t, config.Config{APIToken: "api-secret"}, "/bucket", nil)
 	if recorder.Code != http.StatusUnauthorized {

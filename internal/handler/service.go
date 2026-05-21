@@ -68,6 +68,9 @@ func (s *Service) RegisterHTTP(router *http.ServeMux) {
 
 func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	recorder := newStatusResponseWriter(w)
+	requestID := requestIDFromRequest(r)
+	recorder.Header().Set(requestIDHeader, requestID)
+	r = r.WithContext(contextWithRequestID(r.Context(), requestID))
 	startedAt := time.Now()
 	defer func() {
 		s.recordHTTPRequest(r, recorder.status(), time.Since(startedAt))
