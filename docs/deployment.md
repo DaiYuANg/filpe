@@ -44,6 +44,56 @@ The image copies `config.example.json` to `/app/config.json`. Override config
 values with environment variables such as `MAXIO_ADMIN_TOKEN`,
 `MAXIO_API_TOKEN`, `MAXIO_RAFT_ADDRESS`, and `MAXIO_STORAGE_ADDRESS`.
 
+## Docker Compose
+
+Start a single-node local stack:
+
+```sh
+docker compose -f deploy/compose.single.yaml up --build
+```
+
+Check readiness and metrics:
+
+```sh
+curl http://127.0.0.1:8080/readyz
+curl -H "Authorization: Bearer ${MAXIO_ADMIN_TOKEN:-dev-admin-token}" http://127.0.0.1:8080/metrics
+```
+
+Stop the single-node stack and keep its volume:
+
+```sh
+docker compose -f deploy/compose.single.yaml down
+```
+
+Start a three-node local stack:
+
+```sh
+docker compose -f deploy/compose.three-node.yaml up --build
+```
+
+The three nodes expose HTTP on host ports `8081`, `8082`, and `8083`. Raft and
+gossip traffic stays on the Compose network through service names such as
+`maxio-1`, `maxio-2`, and `maxio-3`.
+
+Check cluster members from node 1:
+
+```sh
+curl -H "Authorization: Bearer ${MAXIO_ADMIN_TOKEN:-dev-admin-token}" http://127.0.0.1:8081/_cluster/members
+```
+
+Stop the three-node stack and keep volumes:
+
+```sh
+docker compose -f deploy/compose.three-node.yaml down
+```
+
+Remove local Compose data volumes only when you intentionally want a clean
+cluster:
+
+```sh
+docker compose -f deploy/compose.three-node.yaml down -v
+```
+
 ## Admin protection
 
 Set `admin_token` or `MAXIO_ADMIN_TOKEN` to protect management and internal shard APIs.
