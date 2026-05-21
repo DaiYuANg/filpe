@@ -71,6 +71,8 @@ treated as a production-grade object storage service.
   visibility.
 - Metrics now expose Raft local replica ID, leader availability, local leader
   state, config change ID, and voting/non-voting/witness/removed member counts.
+- Readiness checks now distinguish storage writability, Raft membership, Raft
+  leader availability, and repair backlog state.
 - HTTP responses now include a generated or client-supplied request ID, and
   audit logs include the same request_id for request-to-log correlation.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
