@@ -82,6 +82,9 @@ treated as a production-grade object storage service.
 - Operational delivery now includes a smoke-test guide covering process
   readiness, metrics, object write/read/delete, range reads, search indexing,
   repair, dedupe, recovery, and cluster status checks.
+- Operational delivery now includes systemd service and environment examples
+  for non-container deployments, with install, startup, log, and readiness
+  commands documented.
 - HTTP responses now include a generated or client-supplied request ID, and
   audit logs include the same request_id for request-to-log correlation.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a

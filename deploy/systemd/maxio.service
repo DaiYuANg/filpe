@@ -1,0 +1,29 @@
+[Unit]
+Description=MaxIO object storage service
+Documentation=https://github.com/lyonbrown4d/maxio
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=maxio
+Group=maxio
+EnvironmentFile=/etc/maxio/maxio.env
+WorkingDirectory=/var/lib/maxio
+ExecStart=/usr/local/bin/maxio
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=1048576
+
+StateDirectory=maxio
+LogsDirectory=maxio
+RuntimeDirectory=maxio
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/maxio /var/log/maxio /run/maxio
+
+[Install]
+WantedBy=multi-user.target

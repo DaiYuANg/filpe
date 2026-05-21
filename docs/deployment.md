@@ -94,6 +94,54 @@ cluster:
 docker compose -f deploy/compose.three-node.yaml down -v
 ```
 
+## Systemd
+
+The systemd assets are intended for a single host or for manually managed
+cluster nodes outside containers.
+
+Install the binary and config:
+
+```sh
+sudo install -D -m 0755 ./maxio /usr/local/bin/maxio
+sudo install -D -m 0644 deploy/systemd/maxio.env.example /etc/maxio/maxio.env
+sudo install -D -m 0644 deploy/systemd/maxio.service /etc/systemd/system/maxio.service
+```
+
+Create the service user and data directory:
+
+```sh
+sudo useradd --system --home-dir /var/lib/maxio --shell /usr/sbin/nologin maxio
+sudo mkdir -p /var/lib/maxio /var/log/maxio
+sudo chown -R maxio:maxio /var/lib/maxio /var/log/maxio
+```
+
+Edit `/etc/maxio/maxio.env` before starting. At minimum, set:
+
+```text
+MAXIO_ADMIN_TOKEN
+MAXIO_STORAGE_ADDRESS
+MAXIO_RAFT_ADDRESS
+```
+
+For multi-node systemd deployments, also set stable `MAXIO_RAFT_NODE_ID`,
+`MAXIO_RAFT_INITIAL_MEMBERS`, `MAXIO_GOSSIP_ADVERTISE_ADDRESS`, and
+`MAXIO_GOSSIP_SEEDS` on every node.
+
+Start the service:
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now maxio
+sudo systemctl status maxio
+```
+
+Check logs and readiness:
+
+```sh
+journalctl -u maxio -f
+curl http://127.0.0.1:8080/readyz
+```
+
 ## Admin protection
 
 Set `admin_token` or `MAXIO_ADMIN_TOKEN` to protect management and internal shard APIs.
