@@ -101,3 +101,34 @@ func TestAddDedupeStatusAddsSummaryMetrics(t *testing.T) {
 		}
 	}
 }
+
+func TestAddRecoveryStatusAddsSummaryMetrics(t *testing.T) {
+	t.Parallel()
+
+	collector := metricsCollector{}
+	service := newService(Dependencies{objects: &object.Service{}}, slog.Default(), config.Config{}, nil)
+
+	collector.addRecoveryStatus(service)
+	output := collector.String()
+
+	required := []string{
+		"maxio_recovery_completed 0",
+		"maxio_recovery_last_failed 0",
+		"maxio_recovery_last_dry_run 0",
+		"maxio_recovery_last_pending_removed 0",
+		"maxio_recovery_last_pending_wait 0",
+		"maxio_recovery_last_pending_delete_staged 0",
+		"maxio_recovery_last_pending_rollback_layout 0",
+		"maxio_recovery_last_pending_release_blob 0",
+		"maxio_recovery_last_pending_committed_cleanup 0",
+		"maxio_recovery_last_orphan_shards_scanned 0",
+		"maxio_recovery_last_orphan_shards_removed 0",
+		"maxio_recovery_last_orphan_shards 0",
+	}
+
+	for _, name := range required {
+		if !strings.Contains(output, name) {
+			t.Fatalf("expected metric %q in output, got: %s", name, output)
+		}
+	}
+}

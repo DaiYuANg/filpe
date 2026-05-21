@@ -34,6 +34,7 @@ func (s *Service) collectMetrics(ctx context.Context) string {
 	collector.addRepairStatus(s)
 	collector.addDedupeStatus(s)
 	collector.addIndexStatus(s)
+	collector.addRecoveryStatus(s)
 	collector.gauge("maxio_metrics_collection_errors", "Number of metric collection failures.", collector.collectionErrors)
 	return collector.String()
 }
@@ -170,6 +171,28 @@ func (collector *metricsCollector) addIndexStatus(s *Service) {
 	collector.gauge("maxio_index_failed_objects", "Objects that failed content indexing.", status.FailedObjects)
 	collector.gauge("maxio_index_last_rebuild_objects", "Objects indexed by the last content index rebuild.", status.LastRebuildObjects)
 	collector.gauge("maxio_index_last_rebuild_failed", "Objects that failed during the last content index rebuild.", status.LastRebuildFailed)
+}
+
+func (collector *metricsCollector) addRecoveryStatus(s *Service) {
+	if s == nil || s.objects == nil {
+		collector.collectionErrors++
+		return
+	}
+	status := s.objects.RecoveryStatus()
+	result := status.LastResult
+	actions := result.PendingActions
+	collector.gauge("maxio_recovery_completed", "Whether storage recovery has completed at least once.", boolInt(status.Completed))
+	collector.gauge("maxio_recovery_last_failed", "Whether the last storage recovery run failed.", boolInt(status.LastError != ""))
+	collector.gauge("maxio_recovery_last_dry_run", "Whether the last storage recovery run was a dry run.", boolInt(result.DryRun))
+	collector.gauge("maxio_recovery_last_pending_removed", "Pending objects removed by the last storage recovery run.", result.PendingRemoved)
+	collector.gauge("maxio_recovery_last_pending_wait", "Fresh pending objects left untouched by the last storage recovery plan.", actions["wait"])
+	collector.gauge("maxio_recovery_last_pending_delete_staged", "Expired staged metadata deleted by the last storage recovery run.", actions["delete_staged"])
+	collector.gauge("maxio_recovery_last_pending_rollback_layout", "Expired pending layouts rolled back by the last storage recovery run.", actions["rollback_layout"])
+	collector.gauge("maxio_recovery_last_pending_release_blob", "Expired retained blob refs released by the last storage recovery run.", actions["release_blob"])
+	collector.gauge("maxio_recovery_last_pending_committed_cleanup", "Committed stale staged metadata cleaned by the last storage recovery run.", actions["committed_cleanup"])
+	collector.gauge("maxio_recovery_last_orphan_shards_scanned", "Shard sets scanned by the last storage recovery run.", result.OrphanShardCleanup.Scanned)
+	collector.gauge("maxio_recovery_last_orphan_shards_removed", "Orphan shard sets removed by the last storage recovery run.", result.OrphanShardCleanup.Removed)
+	collector.gauge("maxio_recovery_last_orphan_shards", "Orphan shard sets found by the last storage recovery run.", len(result.OrphanShardCleanup.Orphans))
 }
 
 func (collector *metricsCollector) gauge(name, help string, value int) {
