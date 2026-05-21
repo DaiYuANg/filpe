@@ -79,6 +79,9 @@ treated as a production-grade object storage service.
 - Operational delivery now includes Docker Compose examples for single-node and
   three-node local clusters, including readiness, metrics, member inspection,
   and cleanup commands.
+- Operational delivery now includes a smoke-test guide covering process
+  readiness, metrics, object write/read/delete, range reads, search indexing,
+  repair, dedupe, recovery, and cluster status checks.
 - HTTP responses now include a generated or client-supplied request ID, and
   audit logs include the same request_id for request-to-log correlation.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a

@@ -251,6 +251,8 @@ Metrics:
 curl -H "Authorization: Bearer $MAXIO_ADMIN_TOKEN" http://127.0.0.1:8080/metrics
 ```
 
+For a full post-start smoke-test sequence, use `docs/smoke-tests.md`.
+
 ## Index operations
 
 Inspect index worker status:
