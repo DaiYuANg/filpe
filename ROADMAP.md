@@ -85,6 +85,10 @@ treated as a production-grade object storage service.
 - Operational delivery now includes systemd service and environment examples
   for non-container deployments, with install, startup, log, and readiness
   commands documented.
+- P0 test coverage now includes three-node remote shard write/read placement,
+  restart recovery for fresh and expired pending writes, and cluster lifecycle
+  idempotency/leader diagnostics for bootstrap, join, decommission, rebalance,
+  readiness, and metrics.
 - HTTP responses now include a generated or client-supplied request ID, and
   audit logs include the same request_id for request-to-log correlation.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
