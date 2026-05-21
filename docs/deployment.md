@@ -19,6 +19,31 @@ Start the server with the default config path:
 ./maxio
 ```
 
+## Container image
+
+Build the local image:
+
+```sh
+docker build -t maxio:dev .
+```
+
+Run a single-node development container with a persistent data volume:
+
+```sh
+docker run --rm \
+  --name maxio \
+  -p 8080:8080 \
+  -p 63000:63000 \
+  -p 7946:7946 \
+  -v maxio-data:/app/data \
+  -e MAXIO_ADMIN_TOKEN="$MAXIO_ADMIN_TOKEN" \
+  maxio:dev
+```
+
+The image copies `config.example.json` to `/app/config.json`. Override config
+values with environment variables such as `MAXIO_ADMIN_TOKEN`,
+`MAXIO_API_TOKEN`, `MAXIO_RAFT_ADDRESS`, and `MAXIO_STORAGE_ADDRESS`.
+
 ## Admin protection
 
 Set `admin_token` or `MAXIO_ADMIN_TOKEN` to protect management and internal shard APIs.
