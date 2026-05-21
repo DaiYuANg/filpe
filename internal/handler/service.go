@@ -67,6 +67,7 @@ func (s *Service) RegisterHTTP(router *http.ServeMux) {
 }
 
 func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	s.beginHTTPRequest()
 	recorder := newStatusResponseWriter(w)
 	requestID := requestIDFromRequest(r)
 	recorder.Header().Set(requestIDHeader, requestID)

@@ -67,6 +67,8 @@ treated as a production-grade object storage service.
   counts, and orphan shard cleanup counts.
 - Metrics now expose aggregate HTTP request counters, error counters, status
   class counters, and request duration totals/max values.
+- Metrics now expose current in-flight HTTP requests for load and stuck-request
+  visibility.
 - HTTP responses now include a generated or client-supplied request ID, and
   audit logs include the same request_id for request-to-log correlation.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a

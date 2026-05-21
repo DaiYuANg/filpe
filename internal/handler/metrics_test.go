@@ -50,9 +50,13 @@ func TestAddHTTPMetricsAddsRequestCounters(t *testing.T) {
 
 	collector := metricsCollector{}
 	service := newService(Dependencies{}, slog.Default(), config.Config{}, nil)
+	service.beginHTTPRequest()
 	service.recordHTTPRequest(nil, http.StatusOK, 25*time.Millisecond)
+	service.beginHTTPRequest()
 	service.recordHTTPRequest(nil, http.StatusNotFound, 50*time.Millisecond)
+	service.beginHTTPRequest()
 	service.recordHTTPRequest(nil, http.StatusInternalServerError, 75*time.Millisecond)
+	service.beginHTTPRequest()
 
 	collector.addHTTPMetrics(service)
 	output := collector.String()
@@ -60,6 +64,7 @@ func TestAddHTTPMetricsAddsRequestCounters(t *testing.T) {
 	required := []string{
 		"maxio_http_requests_total 3",
 		"maxio_http_errors_total 2",
+		"maxio_http_inflight_requests 1",
 		"maxio_http_status_2xx_total 1",
 		"maxio_http_status_4xx_total 1",
 		"maxio_http_status_5xx_total 1",

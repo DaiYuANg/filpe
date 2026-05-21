@@ -8,6 +8,7 @@ func (collector *metricsCollector) addHTTPMetrics(s *Service) {
 	snapshot := s.http.snapshot()
 	collector.counterInt64("maxio_http_requests_total", "Total HTTP requests handled.", snapshot.Total)
 	collector.counterInt64("maxio_http_errors_total", "Total HTTP requests completed with 4xx or 5xx status.", snapshot.Errors)
+	collector.gaugeInt64("maxio_http_inflight_requests", "HTTP requests currently being handled.", snapshot.Inflight)
 	collector.counterInt64("maxio_http_status_unknown_total", "Total HTTP requests with non-standard status codes.", snapshot.StatusClasses[0])
 	collector.counterInt64("maxio_http_status_1xx_total", "Total HTTP requests completed with 1xx status.", snapshot.StatusClasses[1])
 	collector.counterInt64("maxio_http_status_2xx_total", "Total HTTP requests completed with 2xx status.", snapshot.StatusClasses[2])

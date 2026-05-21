@@ -11,6 +11,7 @@ type httpRequestMetrics struct {
 	mu              sync.RWMutex
 	total           int64
 	errors          int64
+	inflight        int64
 	durationTotalMs int64
 	durationMaxMs   int64
 	statusClasses   [6]int64
@@ -19,6 +20,7 @@ type httpRequestMetrics struct {
 type httpRequestMetricsSnapshot struct {
 	Total           int64
 	Errors          int64
+	Inflight        int64
 	DurationTotalMs int64
 	DurationMaxMs   int64
 	StatusClasses   [6]int64
@@ -26,6 +28,15 @@ type httpRequestMetricsSnapshot struct {
 
 func newHTTPRequestMetrics() *httpRequestMetrics {
 	return &httpRequestMetrics{}
+}
+
+func (metrics *httpRequestMetrics) begin() {
+	if metrics == nil {
+		return
+	}
+	metrics.mu.Lock()
+	defer metrics.mu.Unlock()
+	metrics.inflight++
 }
 
 func (metrics *httpRequestMetrics) record(status int, duration time.Duration) {
@@ -39,6 +50,9 @@ func (metrics *httpRequestMetrics) record(status int, duration time.Duration) {
 	defer metrics.mu.Unlock()
 
 	metrics.total++
+	if metrics.inflight > 0 {
+		metrics.inflight--
+	}
 	if status >= http.StatusBadRequest {
 		metrics.errors++
 	}
@@ -59,6 +73,7 @@ func (metrics *httpRequestMetrics) snapshot() httpRequestMetricsSnapshot {
 	return httpRequestMetricsSnapshot{
 		Total:           metrics.total,
 		Errors:          metrics.errors,
+		Inflight:        metrics.inflight,
 		DurationTotalMs: metrics.durationTotalMs,
 		DurationMaxMs:   metrics.durationMaxMs,
 		StatusClasses:   metrics.statusClasses,
@@ -70,6 +85,13 @@ func httpStatusClass(status int) int {
 		return 0
 	}
 	return status / 100
+}
+
+func (s *Service) beginHTTPRequest() {
+	if s == nil || s.http == nil {
+		return
+	}
+	s.http.begin()
 }
 
 func (s *Service) recordHTTPRequest(_ *http.Request, status int, duration time.Duration) {
