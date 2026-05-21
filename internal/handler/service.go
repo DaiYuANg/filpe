@@ -8,6 +8,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lyonbrown4d/maxio/internal/config"
 	"github.com/lyonbrown4d/maxio/internal/dedupe"
@@ -43,6 +44,7 @@ type Service struct {
 	logger *slog.Logger
 	cfg    config.Config
 	dedupe *dedupe.Runtime
+	http   *httpRequestMetrics
 	Dependencies
 }
 
@@ -55,6 +57,7 @@ func newService(deps Dependencies, logger *slog.Logger, cfg config.Config, dedup
 		logger:       logger,
 		cfg:          cfg,
 		dedupe:       dedupeRuntime,
+		http:         newHTTPRequestMetrics(),
 		Dependencies: deps,
 	}
 }
@@ -64,6 +67,15 @@ func (s *Service) RegisterHTTP(router *http.ServeMux) {
 }
 
 func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	recorder := newStatusResponseWriter(w)
+	startedAt := time.Now()
+	defer func() {
+		s.recordHTTPRequest(r, recorder.status(), time.Since(startedAt))
+	}()
+	s.dispatchHTTP(recorder, r)
+}
+
+func (s *Service) dispatchHTTP(w http.ResponseWriter, r *http.Request) {
 	route := strings.Trim(path.Clean(r.URL.Path), "/")
 	parts := strings.Split(route, "/")
 	if s.requiresAdminAuth(route, parts) && !s.authorizeAdmin(r) {

@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"log/slog"
 
@@ -34,6 +36,35 @@ func TestAddRepairStatusAddsSummaryMetrics(t *testing.T) {
 		"maxio_repair_last_repaired_objects 0",
 		"maxio_repair_last_unrecoverable 0",
 		"maxio_repair_last_limited 0",
+	}
+
+	for _, name := range required {
+		if !strings.Contains(output, name) {
+			t.Fatalf("expected metric %q in output, got: %s", name, output)
+		}
+	}
+}
+
+func TestAddHTTPMetricsAddsRequestCounters(t *testing.T) {
+	t.Parallel()
+
+	collector := metricsCollector{}
+	service := newService(Dependencies{}, slog.Default(), config.Config{}, nil)
+	service.recordHTTPRequest(nil, http.StatusOK, 25*time.Millisecond)
+	service.recordHTTPRequest(nil, http.StatusNotFound, 50*time.Millisecond)
+	service.recordHTTPRequest(nil, http.StatusInternalServerError, 75*time.Millisecond)
+
+	collector.addHTTPMetrics(service)
+	output := collector.String()
+
+	required := []string{
+		"maxio_http_requests_total 3",
+		"maxio_http_errors_total 2",
+		"maxio_http_status_2xx_total 1",
+		"maxio_http_status_4xx_total 1",
+		"maxio_http_status_5xx_total 1",
+		"maxio_http_request_duration_ms_total 150",
+		"maxio_http_request_duration_ms_max 75",
 	}
 
 	for _, name := range required {

@@ -27,6 +27,7 @@ func (s *Service) handleMetrics(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) collectMetrics(ctx context.Context) string {
 	collector := metricsCollector{}
+	collector.addHTTPMetrics(s)
 	collector.addReadiness(ctx, s)
 	collector.addStorageNodes(s)
 	collector.addObjectCounts(ctx, s)
@@ -202,7 +203,11 @@ func (collector *metricsCollector) gauge(name, help string, value int) {
 func (collector *metricsCollector) gaugeInt64(name, help string, value int64) {
 	collector.line("# HELP " + name + " " + help)
 	collector.line("# TYPE " + name + " gauge")
-	collector.line(name + " " + strconv.FormatInt(value, 10))
+	collector.line(name + " " + formatMetricInt(value))
+}
+
+func formatMetricInt(value int64) string {
+	return strconv.FormatInt(value, 10)
 }
 
 func (collector *metricsCollector) line(value string) {

@@ -65,6 +65,8 @@ treated as a production-grade object storage service.
   rebuild counters for operational visibility into search freshness.
 - Metrics now expose storage recovery completion, failure state, pending action
   counts, and orphan shard cleanup counts.
+- Metrics now expose aggregate HTTP request counters, error counters, status
+  class counters, and request duration totals/max values.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
   production target.
 
