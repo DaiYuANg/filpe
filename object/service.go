@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/arcgolabs/eventx"
-	"github.com/arcgolabs/mapper"
 	"github.com/lyonbrown4d/maxio/internal/config"
 	"github.com/lyonbrown4d/maxio/internal/engine"
 	"github.com/lyonbrown4d/maxio/internal/index"
@@ -242,14 +241,9 @@ func (s *Service) publishObjectEvent(ctx context.Context, eventType string, meta
 	if s.bus == nil {
 		return nil
 	}
-	payload, err := mapper.Map[map[string]any](meta, mapper.WithFallbackTags("json"))
-	if err != nil {
-		s.logger.WarnContext(ctx, "object event mapping failed", "event", eventType, "error", err)
-		return fmt.Errorf("map object event: %w", err)
-	}
 	if err := s.bus.Publish(ctx, ObjectEvent{
 		Event:   eventType,
-		Payload: payload,
+		Payload: objectEventPayload(meta),
 	}); err != nil {
 		return fmt.Errorf("publish object event: %w", err)
 	}

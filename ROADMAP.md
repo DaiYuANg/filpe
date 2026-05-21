@@ -89,6 +89,9 @@ treated as a production-grade object storage service.
   restart recovery for fresh and expired pending writes, and cluster lifecycle
   idempotency/leader diagnostics for bootstrap, join, decommission, rebalance,
   readiness, and metrics.
+- P0 test coverage now verifies object updated/deleted events are published
+  only after successful committed object mutations, failed put/delete operations
+  do not publish events, and overwrite events match the final committed object.
 - HTTP responses now include a generated or client-supplied request ID, and
   audit logs include the same request_id for request-to-log correlation.
 - Basic S3-compatible HTTP endpoints exist, but S3 compatibility is not yet a
